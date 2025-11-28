@@ -1,4 +1,4 @@
-
+<!doctype html>
 <html>
 <head>
 <meta charset="utf-8"/>
@@ -75,7 +75,12 @@
   #warning:hover {
     animation:warningPulse 1s ease-in-out infinite;
   }
-  #extension-warning { position:fixed; right:12px; top:12px; z-index:55; background:rgba(255,0,0,0.2); padding:8px; border-radius:6px; font-size:12px; display:none; }
+  #extension-warning { position:fixed; right:12px; top:12px; z-index:55; background:rgba(255,0,0,0.2); padding:8px; border-radius:6px; font-size:12px; display:none; border:1px solid rgba(255,0,0,0.3); }
+  .extension-item { margin:2px 0; padding:3px 6px; border-radius:3px; font-size:11px; }
+  .extension-blocked { background:rgba(255,68,68,0.15); color:#ff4444; border-left:3px solid #ff4444; }
+  .extension-safe { background:rgba(78,205,196,0.15); color:#4ecdc4; border-left:3px solid #4ecdc4; }
+  .extension-medium { background:rgba(255,136,0,0.15); color:#ff8800; border-left:3px solid #ff8800; }
+  .extension-low { background:rgba(255,170,0,0.15); color:#ffaa00; border-left:3px solid #ffaa00; }
   #loading { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,0.9); padding:20px; border-radius:10px; z-index:70; }
   .spinner { border:3px solid #333; border-top:3px solid #4ecdc4; border-radius:50%; width:30px; height:30px; animation:spin 1s linear infinite; margin:0 auto 10px; }
   @keyframes spin { 0% { transform:rotate(0deg); } 100% { transform:rotate(360deg); } }
@@ -94,9 +99,12 @@
     <div id="encryption-status">Encryption: <span id="encStat">Active</span></div>
     <div style="margin-top:6px;font-size:12px;color:#aaa">Key rotation: <span id="keyI">8</span>s</div>
     <div style="margin-top:4px;font-size:12px;color:#aaa">Extensions blocked: <span id="extCount">0</span></div>
-    <div id="extension-list" style="margin-top:8px;font-size:11px;color:#ff6b6b;max-height:60px;overflow-y:auto;display:none;">
+    <div id="extension-list" style="margin-top:8px;font-size:11px;color:#ff6b6b;max-height:120px;overflow-y:auto;display:none;">
       <div style="font-weight:bold;margin-bottom:4px;">Detected Extensions:</div>
       <div id="extension-details"></div>
+    </div>
+    <div style="margin-top:4px;font-size:11px;color:#4ecdc4;">
+      <span id="total-extensions">0</span> total extensions loaded
     </div>
   </div>
   
@@ -186,7 +194,10 @@
     'screen capture extension', 'video recorder extension', 'tab recorder extension',
     'extension recorder', 'screencast extension', 'video download extension',
     'tab capture extension', 'screen recorder extension', 'capture extension',
-    'record extension', 'extension capture', 'extension record', 'Chrome Capture - Screenshot & GIF'
+    'record extension', 'extension capture', 'extension record', 'Chrome Capture - Screenshot & GIF',
+    'lighthouse', 'web developer', 'firebug', 'wappalyzer', 'http header',
+    'network', 'inspector', 'debugger', 'developer tools', 'element inspector',
+    'screenshot', 'screen capture', 'video capture', 'audio capture'
   ];
   // ===========================================
 
@@ -336,6 +347,9 @@
       this.checkUserAgent();
       this.checkForRecordingExtensions();
       this.checkForChromeCaptureExtension();
+      this.checkForCommonExtensions();
+      this.checkForExtensionIcons();
+      this.checkForPermissions();
     }
 
     checkStorage() {
@@ -476,8 +490,91 @@
       });
     }
 
+    checkForCommonExtensions() {
+      // Check for common extension patterns in various browser storage areas
+      const commonExtensionPatterns = [
+        'extension', 'addon', 'plugin', 'module', 'script',
+        'greasemonkey', 'tampermonkey', 'userscript', 'violentmonkey',
+        'adblock', 'ublock', 'privacy', 'security', 'developer',
+        'webstore', 'chrome-extension', 'moz-extension', 'edge-extension'
+      ];
+
+      // Check in localStorage
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          const value = localStorage.getItem(key);
+          
+          commonExtensionPatterns.forEach(pattern => {
+            if (key && (key.toLowerCase().includes(pattern) ||
+                (value && value.toLowerCase().includes(pattern)))) {
+              this.detectedExtensions.add(`Common:${pattern}`);
+            }
+          });
+        }
+      } catch (e) {}
+
+      // Check in sessionStorage
+      try {
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          const value = sessionStorage.getItem(key);
+          
+          commonExtensionPatterns.forEach(pattern => {
+            if (key && (key.toLowerCase().includes(pattern) ||
+                (value && value.toLowerCase().includes(pattern)))) {
+              this.detectedExtensions.add(`Common:${pattern}`);
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    checkForExtensionIcons() {
+      // Check for extension icon patterns in DOM
+      const iconPatterns = [
+        'extension-icon', 'extension-icon-16', 'extension-icon-32',
+        'extension-icon-48', 'extension-icon-128', 'extension-icon-256',
+        'chrome-toolbar-icon', 'browser-action', 'page-action'
+      ];
+
+      // Check for icon-related CSS classes
+      const allClasses = document.querySelectorAll('*');
+      allClasses.forEach(element => {
+        const classList = element.className || '';
+        iconPatterns.forEach(pattern => {
+          if (classList.toLowerCase().includes(pattern)) {
+            this.detectedExtensions.add(`Icon:${pattern}`);
+          }
+        });
+      });
+    }
+
+    checkForPermissions() {
+      // Check for extension permissions patterns
+      const permissionPatterns = [
+        'permissions', 'activeTab', 'storage', 'tabs', 'webRequest',
+        'webNavigation', 'cookies', 'downloads', 'history', 'bookmarks',
+        'management', 'runtime', 'extension'
+      ];
+
+      // Check in localStorage and sessionStorage for permission-related items
+      ['localStorage', 'sessionStorage'].forEach(type => {
+        try {
+          const storage = window[type];
+          for (let i = 0; i < storage.length; i++) {
+            const key = storage.key(i);
+            if (key && permissionPatterns.some(pattern =>
+                key.toLowerCase().includes(pattern))) {
+              this.detectedExtensions.add(`Permission:${key}`);
+            }
+          }
+        } catch (e) {}
+      });
+    }
+
     containsExtensionKeywords(text) {
-      return EXTENSION_BLACKLIST.some(keyword => 
+      return EXTENSION_BLACKLIST.some(keyword =>
         text.toLowerCase().includes(keyword.toLowerCase())
       );
     }
@@ -495,48 +592,155 @@
   const extensionDetector = new ExtensionDetector();
   extensionDetector.startMonitoring();
 
+  // Enhanced extension detection with total count
+  function getAllExtensions() {
+    const allExtensions = new Set();
+    
+    // Check localStorage
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key) allExtensions.add(`localStorage:${key}`);
+      }
+    } catch (e) {}
+    
+    // Check sessionStorage
+    try {
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key) allExtensions.add(`sessionStorage:${key}`);
+      }
+    } catch (e) {}
+    
+    // Check cookies
+    try {
+      const cookies = document.cookie.split(';');
+      cookies.forEach(cookie => {
+        const [name] = cookie.trim().split('=');
+        if (name) allExtensions.add(`cookie:${name}`);
+      });
+    } catch (e) {}
+    
+    // Check browser APIs
+    const apiExtensions = [
+      'chrome.runtime', 'chrome.extension', 'chrome.tabs', 'chrome.webRequest',
+      'browser.runtime', 'browser.extension', 'browser.tabs', 'chrome.permissions',
+      'chrome.storage', 'chrome.management'
+    ];
+    
+    apiExtensions.forEach(api => {
+      try {
+        if (window[api] || window.chrome?.[api.split('.')[1]]) {
+          allExtensions.add(`API:${api}`);
+        }
+      } catch (e) {}
+    });
+    
+    return Array.from(allExtensions);
+  }
+
   // Update extension count and list display
   setInterval(() => {
     const count = extensionDetector.getDetectedCount();
     const detectedList = extensionDetector.getDetectedList();
+    const totalExtensions = getAllExtensions().length;
     
     extCountEl.textContent = count;
+    document.getElementById('total-extensions').textContent = totalExtensions;
     
     // Update extension list
     const extensionListEl = document.getElementById('extension-list');
     const extensionDetailsEl = document.getElementById('extension-details');
     
-    if (count > 0) {
-      extWarningEl.style.display = 'block';
+    if (count > 0 || totalExtensions > 0) {
+      extWarningEl.style.display = count > 0 ? 'block' : 'none';
       extensionListEl.style.display = 'block';
       
-      // Format extension details
-      const formattedExtensions = detectedList.map(ext => {
-        let displayName = ext;
+      // Format extension details with highlighting
+      let formattedExtensions = '';
+      
+      if (count > 0) {
+        formattedExtensions += '<div style="color:#ff4444; font-weight:bold; margin-bottom:6px; font-size:12px;">⚠️ BLOCKED_EXTENSIONS:</div>';
         
-        // Special handling for ScreenCaptureAPI
-        if (ext === 'ScreenCaptureAPI') {
-          displayName = 'Screen Capture API (built-in browser capability)';
-        } else {
-          const [type, name] = ext.split(':');
-          if (type === 'API') {
-            displayName = name.replace('chrome.', '').replace('browser.', '');
-          } else if (type === 'UA') {
-            displayName = `User Agent: ${name}`;
-          } else if (type === 'localStorage' || type === 'sessionStorage') {
-            displayName = `${type}: ${name}`;
+        detectedList.forEach(ext => {
+          let displayName = ext;
+          let riskLevel = 'blocked';
+          
+          // Special handling for ScreenCaptureAPI
+          if (ext === 'ScreenCaptureAPI') {
+            displayName = 'Screen Capture API (built-in browser capability)';
+            riskLevel = 'medium';
+          } else {
+            const [type, name] = ext.split(':');
+            if (type === 'API') {
+              displayName = name.replace('chrome.', '').replace('browser.', '');
+              riskLevel = 'medium';
+            } else if (type === 'UA') {
+              displayName = `User Agent: ${name}`;
+              riskLevel = 'low';
+            } else if (type === 'localStorage' || type === 'sessionStorage') {
+              displayName = `${type}: ${name}`;
+              riskLevel = 'medium';
+            } else if (type === 'Common') {
+              displayName = `Common Pattern: ${name}`;
+              riskLevel = 'medium';
+            } else if (type === 'Icon') {
+              displayName = `Icon Pattern: ${name}`;
+              riskLevel = 'low';
+            } else if (type === 'Permission') {
+              displayName = `Permission: ${name}`;
+              riskLevel = 'high';
+            } else if (type === 'Storage') {
+              displayName = `Storage: ${name}`;
+              riskLevel = 'medium';
+            } else if (type === 'CaptureAPI') {
+              displayName = `Capture API: ${name}`;
+              riskLevel = 'high';
+            }
           }
-        }
+          
+          formattedExtensions += `<div class="extension-item extension-${riskLevel}">
+            🚫 ${displayName}
+          </div>`;
+        });
+      }
+      
+      if (totalExtensions > count) {
+        formattedExtensions += '<div style="color:#4ecdc4; font-weight:bold; margin:6px 0 2px 0; font-size:12px;">✅ SAFE_EXTENSIONS:</div>';
         
-        return `• ${displayName}`;
-      }).join('<br>');
+        const safeExtensions = getAllExtensions().filter(ext => !detectedList.includes(ext));
+        
+        safeExtensions.slice(0, 10).forEach(ext => { // Limit to first 10 safe extensions
+          const [type, name] = ext.split(':');
+          let displayName = name;
+          
+          if (type === 'localStorage' || type === 'sessionStorage') {
+            displayName = `${type}: ${name}`;
+          } else if (type === 'cookie') {
+            displayName = `Cookie: ${name}`;
+          } else if (type === 'API') {
+            displayName = name.replace('chrome.', '').replace('browser.', '');
+          }
+          
+          formattedExtensions += `<div class="extension-item extension-safe">
+            ✓ ${displayName}
+          </div>`;
+        });
+        
+        if (safeExtensions.length > 10) {
+          formattedExtensions += `<div style="color:#aaa; font-size:10px; margin-top:2px;">... and ${safeExtensions.length - 10} more safe extensions</div>`;
+        }
+      }
       
       extensionDetailsEl.innerHTML = formattedExtensions;
       
       // Log to console for debugging
       console.log('Detected extensions:', detectedList);
+      console.log('Total extensions:', totalExtensions);
       
-      markDetected(`Detected ${count} suspicious extensions`);
+      if (count > 0) {
+        markDetected(`Detected ${count} suspicious extensions out of ${totalExtensions} total`);
+      }
     } else {
       extWarningEl.style.display = 'none';
       extensionListEl.style.display = 'none';
