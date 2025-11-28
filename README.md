@@ -99,12 +99,18 @@
     <div id="encryption-status">Encryption: <span id="encStat">Active</span></div>
     <div style="margin-top:6px;font-size:12px;color:#aaa">Key rotation: <span id="keyI">8</span>s</div>
     <div style="margin-top:4px;font-size:12px;color:#aaa">Extensions blocked: <span id="extCount">0</span></div>
-    <div id="extension-list" style="margin-top:8px;font-size:11px;color:#ff6b6b;max-height:120px;overflow-y:auto;display:none;">
+    <div id="extension-list" style="margin-top:8px;font-size:11px;color:#ff6b6b;max-height:200px;overflow-y:auto;display:none;">
       <div style="font-weight:bold;margin-bottom:4px;">Detected Extensions:</div>
       <div id="extension-details"></div>
     </div>
     <div style="margin-top:4px;font-size:11px;color:#4ecdc4;">
-      <span id="total-extensions">0</span> total extensions loaded
+      <span id="total-extensions">0</span> total extensions loaded |
+      <span id="blocked-extensions">0</span> blocked
+    </div>
+    <div style="margin-top:2px;font-size:10px;color:#aaa;">
+      <label style="cursor:pointer;">
+        <input type="checkbox" id="show-all-extensions" checked> Show all extensions (highlight blocked)
+      </label>
     </div>
   </div>
   
