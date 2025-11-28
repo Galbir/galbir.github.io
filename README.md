@@ -100,14 +100,14 @@
     <div style="margin-top:6px;font-size:12px;color:#aaa">Key rotation: <span id="keyI">8</span>s</div>
     <div style="margin-top:4px;font-size:12px;color:#aaa">Extensions blocked: <span id="extCount">0</span></div>
     <div id="extension-list" style="margin-top:8px;font-size:11px;color:#ff6b6b;max-height:200px;overflow-y:auto;display:none;">
-      <div style="font-weight:bold;margin-bottom:4px;">🔍 Detected Extensions:</div>
+      <div style="font-weight:bold;margin-bottom:4px;">🔍 Extension Detection Results:</div>
       <div id="extension-details"></div>
       <div style="margin-top:8px;font-size:9px;color:#888; border-top:1px solid rgba(255,255,255,0.1); padding-top:4px;">
-        <strong>📋 Browser Security Limitations:</strong><br>
-        • Websites cannot directly access installed extension lists<br>
-        • Detection is limited to extension data and API presence<br>
-        • Check browser://extensions for complete list<br>
-        • Some extensions run in private/incognito modes
+        <strong>📋 Important Notes:</strong><br>
+        • Websites cannot directly access your extension list<br>
+        • This shows only extension-related data found on this page<br>
+        • Use "View Extensions" button to see all installed extensions<br>
+        • Some extensions may not leave any detectable traces
       </div>
     </div>
     <div style="margin-top:4px;font-size:11px;color:#4ecdc4;">
@@ -629,18 +629,25 @@
     console.log('• Cookie patterns (extension tracking)');
     console.log('========================================');
     
-    // Check localStorage
+    // Check localStorage for extension-related data
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key) {
           // Look for extension-related storage keys
-          if (key.includes('extension') || key.includes('addon') || key.includes('plugin') ||
-              key.includes('chrome-extension') || key.includes('moz-extension') ||
-              key.includes('edge-extension') || key.includes('webstore')) {
+          const extensionPatterns = [
+            'extension', 'addon', 'plugin', 'webstore', 'chrome-extension',
+            'moz-extension', 'edge-extension', 'greasemonkey', 'tampermonkey',
+            'userscript', 'violentmonkey', 'adblock', 'ublock', 'privacy',
+            'security', 'developer', 'webstore', 'manifest', 'extension_id'
+          ];
+          
+          const isExtensionRelated = extensionPatterns.some(pattern =>
+            key.toLowerCase().includes(pattern)
+          );
+          
+          if (isExtensionRelated) {
             allExtensions.add(`localStorage:${key} [EXTENSION_DATA]`);
-          } else {
-            allExtensions.add(`localStorage:${key}`);
           }
         }
       }
@@ -648,18 +655,25 @@
       console.log('localStorage access blocked:', e.message);
     }
     
-    // Check sessionStorage
+    // Check sessionStorage for extension-related data
     try {
       for (let i = 0; i < sessionStorage.length; i++) {
         const key = sessionStorage.key(i);
         if (key) {
           // Look for extension-related storage keys
-          if (key.includes('extension') || key.includes('addon') || key.includes('plugin') ||
-              key.includes('chrome-extension') || key.includes('moz-extension') ||
-              key.includes('edge-extension') || key.includes('webstore')) {
+          const extensionPatterns = [
+            'extension', 'addon', 'plugin', 'webstore', 'chrome-extension',
+            'moz-extension', 'edge-extension', 'greasemonkey', 'tampermonkey',
+            'userscript', 'violentmonkey', 'adblock', 'ublock', 'privacy',
+            'security', 'developer', 'webstore', 'manifest', 'extension_id'
+          ];
+          
+          const isExtensionRelated = extensionPatterns.some(pattern =>
+            key.toLowerCase().includes(pattern)
+          );
+          
+          if (isExtensionRelated) {
             allExtensions.add(`sessionStorage:${key} [EXTENSION_DATA]`);
-          } else {
-            allExtensions.add(`sessionStorage:${key}`);
           }
         }
       }
@@ -667,19 +681,26 @@
       console.log('sessionStorage access blocked:', e.message);
     }
     
-    // Check cookies
+    // Check cookies for extension-related data
     try {
       const cookies = document.cookie.split(';');
       cookies.forEach(cookie => {
         const [name] = cookie.trim().split('=');
         if (name) {
           // Look for extension-related cookies
-          if (name.includes('extension') || name.includes('addon') || name.includes('plugin') ||
-              name.includes('chrome-extension') || name.includes('moz-extension') ||
-              name.includes('edge-extension') || name.includes('webstore')) {
+          const extensionPatterns = [
+            'extension', 'addon', 'plugin', 'webstore', 'chrome-extension',
+            'moz-extension', 'edge-extension', 'greasemonkey', 'tampermonkey',
+            'userscript', 'violentmonkey', 'adblock', 'ublock', 'privacy',
+            'security', 'developer', 'webstore', 'manifest', 'extension_id'
+          ];
+          
+          const isExtensionRelated = extensionPatterns.some(pattern =>
+            name.toLowerCase().includes(pattern)
+          );
+          
+          if (isExtensionRelated) {
             allExtensions.add(`cookie:${name} [EXTENSION_DATA]`);
-          } else {
-            allExtensions.add(`cookie:${name}`);
           }
         }
       });
@@ -704,11 +725,50 @@
       }
     });
     
-    // Add browser environment info
-    allExtensions.add(`Browser: ${navigator.userAgent.split(' ')[0]}`);
-    allExtensions.add(`Platform: ${navigator.platform}`);
-    allExtensions.add(`Language: ${navigator.language}`);
-    allExtensions.add(`Online: ${navigator.onLine}`);
+    // Check for common extension user agent strings
+    const ua = navigator.userAgent.toLowerCase();
+    const extensionUAKeywords = [
+      'extension', 'addon', 'plugin', 'webstore', 'chrome-extension',
+      'moz-extension', 'edge-extension', 'greasemonkey', 'tampermonkey',
+      'userscript', 'violentmonkey', 'adblock', 'ublock', 'privacy',
+      'security', 'developer', 'webstore', 'manifest', 'extension_id'
+    ];
+    
+    extensionUAKeywords.forEach(keyword => {
+      if (ua.includes(keyword)) {
+        allExtensions.add(`UA:${keyword} [DETECTED]`);
+      }
+    });
+    
+    // Check for extension-related DOM elements
+    try {
+      const allClasses = document.querySelectorAll('*');
+      allClasses.forEach(element => {
+        const classList = element.className || '';
+        const extensionPatterns = [
+          'extension-icon', 'extension-icon-16', 'extension-icon-32',
+          'extension-icon-48', 'extension-icon-128', 'extension-icon-256',
+          'chrome-toolbar-icon', 'browser-action', 'page-action',
+          'extension-popup', 'extension-options', 'extension-settings'
+        ];
+        
+        extensionPatterns.forEach(pattern => {
+          if (classList.toLowerCase().includes(pattern)) {
+            allExtensions.add(`DOM:${pattern} [ELEMENT]`);
+          }
+        });
+      });
+    } catch (e) {
+      console.log('DOM access limited:', e.message);
+    }
+    
+    // Only add browser info if no extension data was found
+    if (allExtensions.size === 0) {
+      allExtensions.add(`Browser: ${navigator.userAgent.split(' ')[0]}`);
+      allExtensions.add(`Platform: ${navigator.platform}`);
+      allExtensions.add(`Language: ${navigator.language}`);
+      allExtensions.add(`Online: ${navigator.onLine}`);
+    }
     
     return Array.from(allExtensions);
   }
