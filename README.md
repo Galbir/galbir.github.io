@@ -100,17 +100,25 @@
     <div style="margin-top:6px;font-size:12px;color:#aaa">Key rotation: <span id="keyI">8</span>s</div>
     <div style="margin-top:4px;font-size:12px;color:#aaa">Extensions blocked: <span id="extCount">0</span></div>
     <div id="extension-list" style="margin-top:8px;font-size:11px;color:#ff6b6b;max-height:200px;overflow-y:auto;display:none;">
-      <div style="font-weight:bold;margin-bottom:4px;">Detected Extensions:</div>
+      <div style="font-weight:bold;margin-bottom:4px;">🔍 Detected Extensions:</div>
       <div id="extension-details"></div>
+      <div style="margin-top:8px;font-size:9px;color:#888; border-top:1px solid rgba(255,255,255,0.1); padding-top:4px;">
+        <strong>📋 Browser Security Limitations:</strong><br>
+        • Websites cannot directly access installed extension lists<br>
+        • Detection is limited to extension data and API presence<br>
+        • Check browser://extensions for complete list<br>
+        • Some extensions run in private/incognito modes
+      </div>
     </div>
     <div style="margin-top:4px;font-size:11px;color:#4ecdc4;">
-      <span id="total-extensions">0</span> total extensions loaded |
-      <span id="blocked-extensions">0</span> blocked
+      <span id="total-extensions">0</span> total items detected |
+      <span id="blocked-extensions">0</span> flagged as suspicious
     </div>
     <div style="margin-top:2px;font-size:10px;color:#aaa;">
       <label style="cursor:pointer;">
-        <input type="checkbox" id="showAllExtensions" checked> Show all extensions (highlight blocked)
+        <input type="checkbox" id="showAllExtensions" checked> Show all detected items (highlight suspicious)
       </label>
+      <button id="open-extensions" style="margin-left:8px;padding:2px 6px;background:rgba(78,205,196,0.2);border:1px solid rgba(78,205,196,0.3);border-radius:3px;color:#4ecdc4;font-size:9px;cursor:pointer;">View Extensions</button>
     </div>
   </div>
   
@@ -228,6 +236,7 @@
   const deviceInfoEl = document.getElementById('device-info');
   const showAllExtensionsCheckbox = document.getElementById('showAllExtensions');
   const blockedExtensionsEl = document.getElementById('blocked-extensions');
+  const openExtensionsBtn = document.getElementById('open-extensions');
   
   keyIntervalEl.textContent = KEY_ROTATE_SECONDS;
   userIdEl.textContent = USER_ID;
@@ -604,45 +613,102 @@
   function getAllExtensions() {
     const allExtensions = new Set();
     
+    // Browser security limitations documentation
+    console.log('=== EXTENSION DETECTION LIMITATIONS ===');
+    console.log('Due to browser security policies, websites cannot directly access:');
+    console.log('• List of installed browser extensions');
+    console.log('• Extension names and versions');
+    console.log('• Extension permissions');
+    console.log('• Extension icons');
+    console.log('');
+    console.log('Available detection methods:');
+    console.log('• localStorage/sessionStorage keys (extension data)');
+    console.log('• Browser API presence (chrome.*, browser.*)');
+    console.log('• UserAgent strings (extension-related keywords)');
+    console.log('• DOM element patterns (extension icons)');
+    console.log('• Cookie patterns (extension tracking)');
+    console.log('========================================');
+    
     // Check localStorage
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key) allExtensions.add(`localStorage:${key}`);
+        if (key) {
+          // Look for extension-related storage keys
+          if (key.includes('extension') || key.includes('addon') || key.includes('plugin') ||
+              key.includes('chrome-extension') || key.includes('moz-extension') ||
+              key.includes('edge-extension') || key.includes('webstore')) {
+            allExtensions.add(`localStorage:${key} [EXTENSION_DATA]`);
+          } else {
+            allExtensions.add(`localStorage:${key}`);
+          }
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.log('localStorage access blocked:', e.message);
+    }
     
     // Check sessionStorage
     try {
       for (let i = 0; i < sessionStorage.length; i++) {
         const key = sessionStorage.key(i);
-        if (key) allExtensions.add(`sessionStorage:${key}`);
+        if (key) {
+          // Look for extension-related storage keys
+          if (key.includes('extension') || key.includes('addon') || key.includes('plugin') ||
+              key.includes('chrome-extension') || key.includes('moz-extension') ||
+              key.includes('edge-extension') || key.includes('webstore')) {
+            allExtensions.add(`sessionStorage:${key} [EXTENSION_DATA]`);
+          } else {
+            allExtensions.add(`sessionStorage:${key}`);
+          }
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.log('sessionStorage access blocked:', e.message);
+    }
     
     // Check cookies
     try {
       const cookies = document.cookie.split(';');
       cookies.forEach(cookie => {
         const [name] = cookie.trim().split('=');
-        if (name) allExtensions.add(`cookie:${name}`);
+        if (name) {
+          // Look for extension-related cookies
+          if (name.includes('extension') || name.includes('addon') || name.includes('plugin') ||
+              name.includes('chrome-extension') || name.includes('moz-extension') ||
+              name.includes('edge-extension') || name.includes('webstore')) {
+            allExtensions.add(`cookie:${name} [EXTENSION_DATA]`);
+          } else {
+            allExtensions.add(`cookie:${name}`);
+          }
+        }
       });
-    } catch (e) {}
+    } catch (e) {
+      console.log('cookie access blocked:', e.message);
+    }
     
     // Check browser APIs
     const apiExtensions = [
       'chrome.runtime', 'chrome.extension', 'chrome.tabs', 'chrome.webRequest',
       'browser.runtime', 'browser.extension', 'browser.tabs', 'chrome.permissions',
-      'chrome.storage', 'chrome.management'
+      'chrome.storage', 'chrome.management', 'chrome.identity'
     ];
     
     apiExtensions.forEach(api => {
       try {
         if (window[api] || window.chrome?.[api.split('.')[1]]) {
-          allExtensions.add(`API:${api}`);
+          allExtensions.add(`API:${api} [AVAILABLE]`);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.log(`API ${api} access blocked:`, e.message);
+      }
     });
+    
+    // Add browser environment info
+    allExtensions.add(`Browser: ${navigator.userAgent.split(' ')[0]}`);
+    allExtensions.add(`Platform: ${navigator.platform}`);
+    allExtensions.add(`Language: ${navigator.language}`);
+    allExtensions.add(`Online: ${navigator.onLine}`);
     
     return Array.from(allExtensions);
   }
@@ -777,6 +843,30 @@
   
   // Update display when checkbox is changed
   showAllExtensionsCheckbox.addEventListener('change', updateExtensionDisplay);
+  
+  // Open browser extensions page
+  openExtensionsBtn.addEventListener('click', () => {
+    try {
+      // Try to open extensions page for different browsers
+      const browser = navigator.userAgent.toLowerCase();
+      
+      if (browser.includes('chrome')) {
+        window.open('chrome://extensions', '_blank');
+      } else if (browser.includes('firefox')) {
+        window.open('about:addons', '_blank');
+      } else if (browser.includes('edge')) {
+        window.open('edge://extensions', '_blank');
+      } else if (browser.includes('safari')) {
+        window.open('safari://extensions', '_blank');
+      } else {
+        // Fallback: try common extension URLs
+        window.open('about:blank', '_blank');
+        alert('Extension page not automatically supported for this browser. Please open your browser\'s extensions page manually.');
+      }
+    } catch (e) {
+      alert('Could not open extensions page. Please open it manually through your browser settings.');
+    }
+  });
 
   // Create hidden video
   const video = document.createElement('video');
