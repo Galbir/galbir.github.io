@@ -79,6 +79,21 @@
   #loading { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,0.9); padding:20px; border-radius:10px; z-index:70; }
   .spinner { border:3px solid #333; border-top:3px solid #4ecdc4; border-radius:50%; width:30px; height:30px; animation:spin 1s linear infinite; margin:0 auto 10px; }
   @keyframes spin { 0% { transform:rotate(0deg); } 100% { transform:rotate(360deg); } }
+  
+  #whitelist-btn {
+    background: rgba(78, 205, 196, 0.3);
+    border: 1px solid rgba(78, 205, 196, 0.5);
+    color: #4ecdc4;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    cursor: pointer;
+    margin-top: 6px;
+  }
+  
+  #whitelist-btn:hover {
+    background: rgba(78, 205, 196, 0.5);
+  }
 </style>
 </head>
 <body>
@@ -97,6 +112,7 @@
     <div id="extension-list" style="margin-top:8px;font-size:11px;color:#ff6b6b;max-height:60px;overflow-y:auto;display:none;">
       <div style="font-weight:bold;margin-bottom:4px;">Detected Extensions:</div>
       <div id="extension-details"></div>
+      <button id="whitelist-btn">Whitelist Current Extensions</button>
     </div>
   </div>
   
@@ -182,8 +198,28 @@
   const KEY_ROTATE_SECONDS = 8;
   const FRAME_GAP_THRESHOLD_MS = 300; // Increased from 140 to reduce false positives
   const ENCRYPTION_KEY = generateEncryptionKey();
+  
+  // WHITELIST APPROACH - Known safe extensions
+  const EXTENSION_WHITELIST = [
+    // Password Managers
+    'lastpass', 'bitwarden', '1password', 'dashlane', 'roboform', 'keeper',
+    // Ad Blockers & Privacy
+    'ublock', 'adblock', 'privacy badger', 'ghostery', 'duckduckgo', 'privacy',
+    // Developer Tools
+    'react developer', 'redux devtools', 'vue.js devtools', 'angular',
+    // Productivity
+    'grammarly', 'evernote', 'pocket', 'notion', 'save to', 'onenote',
+    // Browser Enhancement
+    'dark reader', 'tampermonkey', 'greasemonkey', 'video speed', 'stylus',
+    // Communication
+    'google meet', 'zoom', 'teams', 'slack', 'discord', 'whatsapp',
+    // Shopping & Utilities
+    'honey', 'rakuten', 'translate', 'dictionary'
+  ];
+
   const EXTENSION_BLACKLIST = [
-    'Chrome Capture - Screenshot & GIF', 'chrome recorder'
+    'chrome capture', 'screenshot', 'gif recorder', 'screen capture',
+    'recorder', 'nimbus', 'lighthshot', 'awesome screenshot', 'capture'
   ];
   // ===========================================
 
@@ -206,6 +242,7 @@
   const sessionIdEl = document.getElementById('session-id');
   const deviceWarningEl = document.getElementById('device-warning');
   const deviceInfoEl = document.getElementById('device-info');
+  const whitelistBtn = document.getElementById('whitelist-btn');
   
   keyIntervalEl.textContent = KEY_ROTATE_SECONDS;
   userIdEl.textContent = USER_ID;
@@ -248,7 +285,6 @@
         language: navigator.language,
         online: navigator.onLine,
         touchDevice: isTouchDevice,
-        mobileViewport: isMobileViewport,
         mobileScreen: isMobileScreen,
         mobilePlatform: isMobilePlatform
       };
@@ -263,7 +299,7 @@
         <div><strong>Language:</strong> ${deviceInfo.language}</div>
         <div><strong>Online Status:</strong> ${deviceInfo.online ? 'Online' : 'Offline'}</div>
         <div><strong>Touch Support:</strong> ${deviceInfo.touchDevice ? 'Yes' : 'No'}</div>
-        <div><strong>Mobile Indicators:</strong> ${deviceInfo.mobileViewport || deviceInfo.mobileScreen || deviceInfo.mobilePlatform ? 'Detected' : 'None'}</div>
+        <div><strong>Mobile Indicators:</strong> ${deviceInfo.mobileScreen || deviceInfo.mobilePlatform ? 'Detected' : 'None'}</div>
       `;
     }
   }
@@ -306,11 +342,42 @@
     }
   }
 
-  // Chrome extension detection and blocking
+  // Chrome extension detection and blocking with WHITELIST approach
   class ExtensionDetector {
     constructor() {
       this.detectedExtensions = new Set();
+      this.whitelistedExtensions = new Set();
       this.monitoringInterval = null;
+      this.loadWhitelistedExtensions();
+    }
+
+    loadWhitelistedExtensions() {
+      // Load previously whitelisted extensions from sessionStorage
+      try {
+        const whitelisted = sessionStorage.getItem('extension_whitelist');
+        if (whitelisted) {
+          const parsed = JSON.parse(whitelisted);
+          parsed.forEach(ext => this.whitelistedExtensions.add(ext));
+        }
+      } catch (e) {
+        // Ignore errors
+      }
+    }
+
+    saveWhitelistedExtensions() {
+      try {
+        sessionStorage.setItem('extension_whitelist', JSON.stringify(Array.from(this.whitelistedExtensions)));
+      } catch (e) {
+        // Ignore errors
+      }
+    }
+
+    whitelistCurrentExtensions() {
+      const current = Array.from(this.detectedExtensions);
+      current.forEach(ext => this.whitelistedExtensions.add(ext));
+      this.detectedExtensions.clear();
+      this.saveWhitelistedExtensions();
+      console.log('Whitelisted extensions:', current);
     }
 
     startMonitoring() {
@@ -342,7 +409,7 @@
           const storage = window[type];
           for (let i = 0; i < storage.length; i++) {
             const key = storage.key(i);
-            if (this.containsExtensionKeywords(key)) {
+            if (this.containsBlacklistKeywords(key)) {
               this.detectedExtensions.add(`${type}:${key}`);
             }
           }
@@ -362,7 +429,11 @@
       suspiciousAPIs.forEach(api => {
         try {
           if (window[api] || window.chrome?.[api.split('.')[1]]) {
-            this.detectedExtensions.add(`API:${api}`);
+            // Check if this is likely a whitelisted extension
+            const isWhitelisted = this.checkWhitelistedExtension(api);
+            if (!isWhitelisted && !this.whitelistedExtensions.has(`API:${api}`)) {
+              this.detectedExtensions.add(`API:${api}`);
+            }
           }
         } catch (e) {
           // Ignore access errors
@@ -387,6 +458,51 @@
       });
     }
 
+    checkWhitelistedExtension(apiCall) {
+      // Check if this API usage matches known whitelisted extension patterns
+      try {
+        // Method 1: Check performance entries for extension scripts
+        if (performance.getEntriesByType) {
+          const entries = performance.getEntriesByType('resource');
+          for (const entry of entries) {
+            const url = entry.name.toLowerCase();
+            if (EXTENSION_WHITELIST.some(whitelist => url.includes(whitelist))) {
+              return true;
+            }
+          }
+        }
+
+        // Method 2: Check for known extension patterns in DOM
+        const allScripts = document.querySelectorAll('script');
+        for (const script of allScripts) {
+          const src = (script.src || '').toLowerCase();
+          if (EXTENSION_WHITELIST.some(whitelist => src.includes(whitelist))) {
+            return true;
+          }
+        }
+
+        // Method 3: Check for extension-specific globals
+        const whitelistGlobals = {
+          'grammarly': 'grammarly',
+          'lastpass': 'lastpass',
+          'bitwarden': 'bitwarden',
+          'ublock': 'ublock',
+          'adblock': 'adblock',
+          'honey': 'honey'
+        };
+
+        for (const [extension, global] of Object.entries(whitelistGlobals)) {
+          if (window[global]) {
+            return true;
+          }
+        }
+
+        return false;
+      } catch (e) {
+        return false; // Default to suspicious if we can't verify
+      }
+    }
+
     checkUserAgent() {
       const ua = navigator.userAgent.toLowerCase();
       EXTENSION_BLACKLIST.forEach(keyword => {
@@ -398,12 +514,8 @@
 
     checkForRecordingExtensions() {
       // Check for screen capture APIs being used in suspicious ways
-      // Only flag if we detect actual extension-like behavior
       if (navigator.mediaDevices?.getDisplayMedia) {
-        // Check if getDisplayMedia is being called unexpectedly
-        // This is a more conservative approach to avoid false positives
         try {
-          // Check if there are any event listeners that might indicate extension activity
           const originalGetDisplayMedia = navigator.mediaDevices.getDisplayMedia;
           let extensionDetected = false;
           
@@ -473,7 +585,7 @@
       });
     }
 
-    containsExtensionKeywords(text) {
+    containsBlacklistKeywords(text) {
       return EXTENSION_BLACKLIST.some(keyword => 
         text.toLowerCase().includes(keyword.toLowerCase())
       );
@@ -492,6 +604,15 @@
   const extensionDetector = new ExtensionDetector();
   extensionDetector.startMonitoring();
 
+  // Whitelist button handler
+  whitelistBtn.addEventListener('click', () => {
+    extensionDetector.whitelistCurrentExtensions();
+    whitelistBtn.textContent = 'Whitelisted!';
+    setTimeout(() => {
+      whitelistBtn.textContent = 'Whitelist Current Extensions';
+    }, 2000);
+  });
+
   // Update extension count and list display
   setInterval(() => {
     const count = extensionDetector.getDetectedCount();
@@ -507,12 +628,20 @@
       extWarningEl.style.display = 'block';
       extensionListEl.style.display = 'block';
       
-      // Format extension details
+      // Format extension details with whitelist info
       const formattedExtensions = detectedList.map(ext => {
         let displayName = ext;
+        let isSuspicious = true;
         
-        // Special handling for ScreenCaptureAPI
-        if (ext === 'ScreenCaptureAPI') {
+        // Special handling for runtime APIs that might be whitelisted
+        if (ext.startsWith('API:chrome.runtime') || ext.startsWith('API:browser.runtime')) {
+          displayName = 'Browser Extension (Runtime API)';
+          // Check if we should show as potentially safe
+          if (extensionDetector.checkWhitelistedExtension('runtime')) {
+            displayName += ' - Potentially Safe Extension';
+            isSuspicious = false;
+          }
+        } else if (ext === 'ScreenCaptureAPI') {
           displayName = 'Screen Capture API (built-in browser capability)';
         } else {
           const [type, name] = ext.split(':');
@@ -525,15 +654,25 @@
           }
         }
         
-        return `• ${displayName}`;
+        return `• ${displayName} ${isSuspicious ? '🚨' : '⚠️'}`;
       }).join('<br>');
       
       extensionDetailsEl.innerHTML = formattedExtensions;
       
+      // Only mark as detected if there are actual suspicious extensions
+      const suspiciousCount = detectedList.filter(ext => {
+        if (ext.startsWith('API:chrome.runtime') || ext.startsWith('API:browser.runtime')) {
+          return !extensionDetector.checkWhitelistedExtension('runtime');
+        }
+        return true;
+      }).length;
+      
+      if (suspiciousCount > 0) {
+        markDetected(`Detected ${suspiciousCount} suspicious extensions`);
+      }
+      
       // Log to console for debugging
       console.log('Detected extensions:', detectedList);
-      
-      markDetected(`Detected ${count} suspicious extensions`);
     } else {
       extWarningEl.style.display = 'none';
       extensionListEl.style.display = 'none';
@@ -1083,27 +1222,6 @@
       gl.viewport(0, 0, w, h);
     }
   }
-
-  // Enhanced pixel probe with encryption check
-  // function pixelProbe() {
-  //   try {
-  //     const px = new Uint8Array(4);
-  //     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
-  //     const sum = px[0] + px[1] + px[2] + px[3];
-  //     if (sum === 0 && !video.paused && !video.ended) {
-  //       markDetected('readPixels returned zero - possible capture hook');
-  //     }
-      
-  //     // Check for pixel tampering
-  //     if (sum > 0 && px[0] === 255 && px[1] === 255 && px[2] === 255) {
-  //       markDetected('Unusual pixel pattern detected');
-  //     }
-  //   } catch (e) {
-  //     markDetected('readPixels exception - possible capture hook');
-  //   }
-  //   setTimeout(pixelProbe, 5000); // Increased interval to reduce false positives
-  // }
-  // setTimeout(pixelProbe, 1200);
 
   // User interaction handling
   canvas.addEventListener('click', () => { 
