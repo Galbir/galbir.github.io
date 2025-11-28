@@ -109,7 +109,7 @@
     </div>
     <div style="margin-top:2px;font-size:10px;color:#aaa;">
       <label style="cursor:pointer;">
-        <input type="checkbox" id="show-all-extensions" checked> Show all extensions (highlight blocked)
+        <input type="checkbox" id="showAllExtensions" checked> Show all extensions (highlight blocked)
       </label>
     </div>
   </div>
@@ -226,6 +226,8 @@
   const sessionIdEl = document.getElementById('session-id');
   const deviceWarningEl = document.getElementById('device-warning');
   const deviceInfoEl = document.getElementById('device-info');
+  const showAllExtensionsCheckbox = document.getElementById('showAllExtensions');
+  const blockedExtensionsEl = document.getElementById('blocked-extensions');
   
   keyIntervalEl.textContent = KEY_ROTATE_SECONDS;
   userIdEl.textContent = USER_ID;
@@ -646,13 +648,15 @@
   }
 
   // Update extension count and list display
-  setInterval(() => {
+  function updateExtensionDisplay() {
     const count = extensionDetector.getDetectedCount();
     const detectedList = extensionDetector.getDetectedList();
     const totalExtensions = getAllExtensions().length;
+    const showAllExtensions = showAllExtensionsCheckbox.checked;
     
     extCountEl.textContent = count;
     document.getElementById('total-extensions').textContent = totalExtensions;
+    blockedExtensionsEl.textContent = count;
     
     // Update extension list
     const extensionListEl = document.getElementById('extension-list');
@@ -665,61 +669,19 @@
       // Format extension details with highlighting
       let formattedExtensions = '';
       
-      if (count > 0) {
-        formattedExtensions += '<div style="color:#ff4444; font-weight:bold; margin-bottom:6px; font-size:12px;">⚠️ BLOCKED_EXTENSIONS:</div>';
+      if (showAllExtensions) {
+        // Show ALL extensions with blocked ones highlighted
+        formattedExtensions += '<div style="color:#4ecdc4; font-weight:bold; margin-bottom:6px; font-size:12px;">📋 ALL_EXTENSIONS:</div>';
         
-        detectedList.forEach(ext => {
-          let displayName = ext;
-          let riskLevel = 'blocked';
-          
-          // Special handling for ScreenCaptureAPI
-          if (ext === 'ScreenCaptureAPI') {
-            displayName = 'Screen Capture API (built-in browser capability)';
-            riskLevel = 'medium';
-          } else {
-            const [type, name] = ext.split(':');
-            if (type === 'API') {
-              displayName = name.replace('chrome.', '').replace('browser.', '');
-              riskLevel = 'medium';
-            } else if (type === 'UA') {
-              displayName = `User Agent: ${name}`;
-              riskLevel = 'low';
-            } else if (type === 'localStorage' || type === 'sessionStorage') {
-              displayName = `${type}: ${name}`;
-              riskLevel = 'medium';
-            } else if (type === 'Common') {
-              displayName = `Common Pattern: ${name}`;
-              riskLevel = 'medium';
-            } else if (type === 'Icon') {
-              displayName = `Icon Pattern: ${name}`;
-              riskLevel = 'low';
-            } else if (type === 'Permission') {
-              displayName = `Permission: ${name}`;
-              riskLevel = 'high';
-            } else if (type === 'Storage') {
-              displayName = `Storage: ${name}`;
-              riskLevel = 'medium';
-            } else if (type === 'CaptureAPI') {
-              displayName = `Capture API: ${name}`;
-              riskLevel = 'high';
-            }
-          }
-          
-          formattedExtensions += `<div class="extension-item extension-${riskLevel}">
-            🚫 ${displayName}
-          </div>`;
-        });
-      }
-      
-      if (totalExtensions > count) {
-        formattedExtensions += '<div style="color:#4ecdc4; font-weight:bold; margin:6px 0 2px 0; font-size:12px;">✅ SAFE_EXTENSIONS:</div>';
-        
-        const safeExtensions = getAllExtensions().filter(ext => !detectedList.includes(ext));
-        
-        safeExtensions.slice(0, 10).forEach(ext => { // Limit to first 10 safe extensions
+        // Get all extensions and mark which ones are blocked
+        const allExtensions = getAllExtensions();
+        allExtensions.forEach(ext => {
           const [type, name] = ext.split(':');
           let displayName = name;
+          let isBlocked = detectedList.includes(ext);
+          let riskLevel = isBlocked ? 'blocked' : 'safe';
           
+          // Format display name
           if (type === 'localStorage' || type === 'sessionStorage') {
             displayName = `${type}: ${name}`;
           } else if (type === 'cookie') {
@@ -728,13 +690,69 @@
             displayName = name.replace('chrome.', '').replace('browser.', '');
           }
           
-          formattedExtensions += `<div class="extension-item extension-safe">
-            ✓ ${displayName}
+          // Add icon and styling based on status
+          const icon = isBlocked ? '🚫' : '✓';
+          const statusText = isBlocked ? 'BLOCKED' : 'SAFE';
+          const statusColor = isBlocked ? '#ff4444' : '#4ecdc4';
+          
+          formattedExtensions += `<div class="extension-item extension-${riskLevel}" style="border-left: 3px solid ${statusColor};">
+            ${icon} ${displayName} <span style="color:${statusColor}; font-size:9px; font-weight:bold;">[${statusText}]</span>
           </div>`;
         });
         
-        if (safeExtensions.length > 10) {
-          formattedExtensions += `<div style="color:#aaa; font-size:10px; margin-top:2px;">... and ${safeExtensions.length - 10} more safe extensions</div>`;
+        if (count > 0) {
+          formattedExtensions += `<div style="color:#ff4444; font-weight:bold; margin-top:8px; font-size:11px; border-top:1px solid rgba(255,0,0,0.2); padding-top:4px;">
+            ⚠️ ${count} extensions flagged as suspicious
+          </div>`;
+        }
+      } else {
+        // Show ONLY blocked extensions
+        if (count > 0) {
+          formattedExtensions += '<div style="color:#ff4444; font-weight:bold; margin-bottom:6px; font-size:12px;">🚨 BLOCKED_EXTENSIONS:</div>';
+          
+          detectedList.forEach(ext => {
+            let displayName = ext;
+            let riskLevel = 'blocked';
+            
+            // Special handling for ScreenCaptureAPI
+            if (ext === 'ScreenCaptureAPI') {
+              displayName = 'Screen Capture API (built-in browser capability)';
+              riskLevel = 'medium';
+            } else {
+              const [type, name] = ext.split(':');
+              if (type === 'API') {
+                displayName = name.replace('chrome.', '').replace('browser.', '');
+                riskLevel = 'medium';
+              } else if (type === 'UA') {
+                displayName = `User Agent: ${name}`;
+                riskLevel = 'low';
+              } else if (type === 'localStorage' || type === 'sessionStorage') {
+                displayName = `${type}: ${name}`;
+                riskLevel = 'medium';
+              } else if (type === 'Common') {
+                displayName = `Common Pattern: ${name}`;
+                riskLevel = 'medium';
+              } else if (type === 'Icon') {
+                displayName = `Icon Pattern: ${name}`;
+                riskLevel = 'low';
+              } else if (type === 'Permission') {
+                displayName = `Permission: ${name}`;
+                riskLevel = 'high';
+              } else if (type === 'Storage') {
+                displayName = `Storage: ${name}`;
+                riskLevel = 'medium';
+              } else if (type === 'CaptureAPI') {
+                displayName = `Capture API: ${name}`;
+                riskLevel = 'high';
+              }
+            }
+            
+            formattedExtensions += `<div class="extension-item extension-${riskLevel}">
+              🚫 ${displayName}
+            </div>`;
+          });
+        } else {
+          formattedExtensions += '<div style="color:#4ecdc4; font-size:12px; text-align:center; padding:10px;">✅ No suspicious extensions detected</div>';
         }
       }
       
@@ -752,7 +770,13 @@
       extensionListEl.style.display = 'none';
       extensionDetailsEl.innerHTML = '';
     }
-  }, 1000);
+  }
+
+  // Update extension display
+  setInterval(updateExtensionDisplay, 1000);
+  
+  // Update display when checkbox is changed
+  showAllExtensionsCheckbox.addEventListener('change', updateExtensionDisplay);
 
   // Create hidden video
   const video = document.createElement('video');
