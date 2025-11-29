@@ -797,10 +797,11 @@
   }
 
   // Setup WebGL with enhanced security
-  const gl = canvas.getContext('webgl', { 
-    preserveDrawingBuffer: false, 
+  const gl = canvas.getContext('webgl', {
+    preserveDrawingBuffer: false,
     antialias: true,
-    powerPreference: "high-performance"
+    powerPreference: "high-performance",
+    failIfMajorPerformanceCaveat: true
   });
   if (!gl) { 
     alert('WebGL not available. Use a modern browser.'); 
@@ -886,12 +887,17 @@
   gl.vertexAttribPointer(a_pos, 2, gl.FLOAT, false, 16, 0);
   gl.vertexAttribPointer(a_uv, 2, gl.FLOAT, false, 16, 8);
 
-  // Create texture
+  // Create texture with anti-fingerprinting
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  
+  // Anti-fingerprinting: Randomize texture parameters
+  const randomSeed = Math.random();
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, randomSeed > 0.5 ? gl.CLAMP_TO_EDGE : gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, randomSeed > 0.5 ? gl.CLAMP_TO_EDGE : gl.REPEAT);
 
   // Enhanced uniforms
   const u_tex = gl.getUniformLocation(prog, 'u_tex');
@@ -925,34 +931,85 @@
   let decryptionKeyValid = true;
   let encryptionKey = ENCRYPTION_KEY;
 
-  // Enhanced rAF monitoring
+  // Enhanced rAF monitoring with screen detection
   let lastRAF = performance.now();
+  let frameCount = 0;
+  let lastFrameTime = performance.now();
+  
   function rafCheck(now) {
     const dt = now - lastRAF;
     lastRAF = now;
+    frameCount++;
+    
+    // Check for frame rate anomalies (OBS often causes irregular frame timing)
     if (dt > FRAME_GAP_THRESHOLD_MS) {
       markDetected('High rAF gap: ' + Math.round(dt) + 'ms (possible OBS hook)');
     }
+    
+    // Check for consistent frame timing (screen recording often has regular patterns)
+    if (frameCount > 60) {
+      const avgFrameTime = (now - lastFrameTime) / frameCount;
+      if (Math.abs(avgFrameTime - 16.67) < 1) { // Very close to 60fps
+        markDetected('Consistent 60fps detected (possible screen recording)');
+      }
+      frameCount = 0;
+      lastFrameTime = now;
+    }
+    
     requestAnimationFrame(rafCheck);
   }
   requestAnimationFrame(rafCheck);
 
-  // Enhanced canvas capture detection
+  // Enhanced canvas capture detection and anti-screen recording
   const _origCanvasCapture = HTMLCanvasElement.prototype.captureStream;
   HTMLCanvasElement.prototype.captureStream = function(...args) {
     try {
       const id = (this === canvas) ? 'GL_CANVAS' : (this === overlay ? 'OVERLAY' : 'OTHER_CANVAS');
       markDetected('canvas.captureStream() called on ' + id);
+      
+      // Return corrupted stream for anti-screen recording
+      if (this === canvas || this === overlay) {
+        console.log('🚫 Blocking screen capture attempt');
+        // Return a black stream instead
+        const blackCanvas = document.createElement('canvas');
+        blackCanvas.width = this.width;
+        blackCanvas.height = this.height;
+        const blackCtx = blackCanvas.getContext('2d');
+        blackCtx.fillStyle = '#000';
+        blackCtx.fillRect(0, 0, blackCanvas.width, blackCanvas.height);
+        return blackCanvas.captureStream.apply(blackCanvas, args);
+      }
     } catch (e) {}
     return _origCanvasCapture.call(this, ...args);
   };
 
-  // Enhanced MediaRecorder detection
+  // Enhanced MediaRecorder detection with anti-recording
   const _origMediaRecorder = window.MediaRecorder;
   if (_origMediaRecorder) {
     window.MediaRecorder = function(stream, opt) {
       markDetected('MediaRecorder created (possible recording)');
-      return new _origMediaRecorder(stream, opt);
+      
+      // Return corrupted recorder for anti-screen recording
+      try {
+        const recorder = new _origMediaRecorder(stream, opt);
+        
+        // Override the dataavailable event to return corrupted data
+        const originalOnDataAvailable = recorder.ondataavailable;
+        recorder.ondataavailable = function(e) {
+          if (e.data && e.data.size > 0) {
+            // Corrupt the video data
+            const corruptedBlob = new Blob(['[CORRUPTED DATA]'], { type: 'video/webm' });
+            e.data = corruptedBlob;
+          }
+          if (originalOnDataAvailable) {
+            originalOnDataAvailable.call(this, e);
+          }
+        };
+        
+        return recorder;
+      } catch (e) {
+        return new _origMediaRecorder(stream, opt);
+      }
     };
     Object.setPrototypeOf(window.MediaRecorder, _origMediaRecorder);
     window.MediaRecorder.prototype = _origMediaRecorder.prototype;
