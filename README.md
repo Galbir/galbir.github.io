@@ -222,6 +222,8 @@
   const FRAME_GAP_THRESHOLD_MS = 80; // Relaxed for browser/OBS testing
   const ENCRYPTION_KEY = generateEncryptionKey();
   let videoReady = false;
+  let frameCanvas = null;
+  let frameCtx = null;
   
   // WHITELIST APPROACH - Known safe extensions
   const EXTENSION_WHITELIST = [
@@ -1128,13 +1130,13 @@
       gapCount = Math.max(gapCount - 1, 0);
     }
     
-    if (frameCount > 60) {
+    if (frameCount > 180) {
       const avgFrameTime = (now - lastFrameTime) / frameCount;
       lastDt = avgFrameTime;
-      if (Math.abs(avgFrameTime - 16.67) < 4.5) {  // Relaxed tolerance for testing
+      if (Math.abs(avgFrameTime - 16.67) < 0.8) {  // Tight: ultra-locked 60FPS (suspicious)
         fpsCount = Math.min(fpsCount + 1, 5);
         if (fpsCount >= 3) {
-          markDetected(`Consistent FPS x3+: ${(1000/avgFrameTime).toFixed(1)} (recording)`);
+          markDetected(`Locked FPS x3+: ${(1000/avgFrameTime).toFixed(1)} (${avgFrameTime.toFixed(2)}ms) (capture lock)`);
         }
       } else {
         fpsCount = Math.max(fpsCount - 1, 0);
@@ -1143,16 +1145,16 @@
       lastFrameTime = now;
     }
     
-    if (frameDts.length >= 60) {
+    if (frameDts.length >= 120) {
       const mean = frameDts.reduce((a,b)=>a+b,0) / frameDts.length;
       const variance = frameDts.reduce((a,b)=>a + Math.pow(b-mean,2),0) / frameDts.length;
       const stdDev = Math.sqrt(variance);
       lastStdDev = stdDev;
       const jitter = stdDev / mean;
-      if (jitter < 0.004) {  // <0.4% jitter: extreme smoothing (OBS etc.)
+      if (jitter < 0.0015) {  // <0.15% jitter: extreme smoothing (OBS etc.)
         varCount = Math.min(varCount + 1, 5);
         if (varCount >= 3) {
-          markDetected(`Low jitter x3+: ${(jitter*100).toFixed(1)}% (${stdDev.toFixed(2)}ms stddev) (smoothing/OBS)`);
+          markDetected(`Low jitter x3+: ${(jitter*100).toFixed(2)}% (${stdDev.toFixed(2)}ms stddev) (smoothing/OBS)`);
         }
       } else {
         varCount = Math.max(varCount - 1, 0);
@@ -1572,15 +1574,24 @@
         }
       } else {
         gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        
+        // Draw video to 2D canvas first (add CPU jitter, anti-smoothing)
+        if (!frameCanvas || frameCanvas.width !== video.videoWidth || frameCanvas.height !== video.videoHeight) {
+          frameCanvas = document.createElement('canvas');
+          frameCanvas.width = video.videoWidth;
+          frameCanvas.height = video.videoHeight;
+          frameCtx = frameCanvas.getContext('2d');
+        }
+        frameCtx.drawImage(video, 0, 0, frameCanvas.width, frameCanvas.height);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, frameCanvas);
         
         // Debug: Check if video is ready
         if (video.readyState >= 2) {
           if (!videoReady) {
             videoReady = true;
-            console.log('🎬 Video is ready for rendering');
+            console.log('🎬 Video is ready for rendering via 2D canvas');
             console.log('Video dimensions:', video.videoWidth, 'x', video.videoHeight);
-            statEl.textContent = 'OK - Video playing';
+            statEl.textContent = 'OK - Video + 2D canvas';
           }
         } else {
           if (videoReady) {
