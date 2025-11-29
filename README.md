@@ -192,11 +192,11 @@
 <script>
 (async function(){
   // ========== ENHANCED CONFIGURATION ==========
-  const VIDEO_URL = "https://www.w3schools.com/html/mov_bbb.mp4";
-  const FALLBACK_VIDEO_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+  const VIDEO_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+  const FALLBACK_VIDEO_URL = "https://samplelib.com/lib/preview/mp4/sample-10s.mp4";
   const USER_ID = "secure_user_" + Math.random().toString(36).substr(2, 9);
   const KEY_ROTATE_SECONDS = 8;
-  const FRAME_GAP_THRESHOLD_MS = 300; // Increased from 140 to reduce false positives
+  const FRAME_GAP_THRESHOLD_MS = 500; // Increased to reduce false positives on load/OBS
   const ENCRYPTION_KEY = generateEncryptionKey();
   let videoReady = false;
   
@@ -688,44 +688,17 @@
   video.loop = true;
   video.playsInline = true;
   
-  // Add video to DOM but make it visible for debugging
-  video.style.position = 'fixed';
-  video.style.top = '10px';
-  video.style.right = '10px';
-  video.style.width = '320px';
-  video.style.height = '180px';
-  video.style.border = '2px solid #4ecdc4';
-  video.style.zIndex = '100';
-  video.style.background = '#000';
-  video.style.display = 'block';
+  // Hide video completely - OBS cannot capture hidden elements
+  video.style.position = 'absolute';
+  video.style.left = '-9999px';
+  video.style.top = '-9999px';
+  video.style.width = '1px';
+  video.style.height = '1px';
+  video.style.zIndex = '-1';
+  video.style.display = 'none';
   document.body.appendChild(video);
   
-  // Add play button if autoplay fails
-  const playButton = document.createElement('button');
-  playButton.textContent = '▶ Play Video';
-  playButton.style.position = 'fixed';
-  playButton.style.top = '200px';
-  playButton.style.right = '10px';
-  playButton.style.zIndex = '101';
-  playButton.style.padding = '8px 12px';
-  playButton.style.background = '#4ecdc4';
-  playButton.style.border = 'none';
-  playButton.style.borderRadius = '4px';
-  playButton.style.color = '#000';
-  playButton.style.fontWeight = 'bold';
-  playButton.style.cursor = 'pointer';
-  playButton.style.display = 'block';
-  
-  playButton.addEventListener('click', () => {
-    video.play().then(() => {
-      console.log('✅ Video played manually');
-      playButton.style.display = 'none';
-    }).catch(e => {
-      console.log('❌ Manual play failed:', e);
-    });
-  });
-  
-  document.body.appendChild(playButton);
+  // Removed visible play button - video hidden and autoplays
   
   // Try to load video with fallback
   let videoLoaded = false;
@@ -733,23 +706,63 @@
   
   function loadVideo(url) {
     return new Promise((resolve, reject) => {
-      console.log('Attempting to load video from:', url);
+      console.log('🎬 Attempting to load video from:', url);
+      console.log('🔍 Video element state:', {
+        readyState: video.readyState,
+        networkState: video.networkState,
+        src: video.src
+      });
+      
       video.src = url;
-      video.addEventListener('loadeddata', () => {
+      
+      const onLoadData = () => {
         videoLoaded = true;
-        console.log('Video loaded data event fired');
+        console.log('✅ Video loaded data event fired');
+        console.log('📹 Video details:', {
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          duration: video.duration,
+          readyState: video.readyState
+        });
+        video.removeEventListener('loadeddata', onLoadData);
+        video.removeEventListener('error', onError);
+        video.removeEventListener('canplay', onCanPlay);
         resolve();
-      });
-      video.addEventListener('error', (e) => {
-        console.error('Video error event:', e);
+      };
+      
+      const onError = (e) => {
+        console.error('❌ Video error event:', e);
+        console.error('🔍 Video error details:', {
+          code: e.target.error?.code,
+          message: e.target.error?.message,
+          src: e.target.src
+        });
+        video.removeEventListener('loadeddata', onLoadData);
+        video.removeEventListener('error', onError);
+        video.removeEventListener('canplay', onCanPlay);
         reject(new Error(`Failed to load video from ${url}`));
-      });
-      video.addEventListener('canplay', () => {
-        console.log('Video canplay event fired');
-      });
+      };
+      
+      const onCanPlay = () => {
+        console.log('🎮 Video canplay event fired');
+        console.log('📹 Video canplay details:', {
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          duration: video.duration
+        });
+      };
+      
+      video.addEventListener('loadeddata', onLoadData);
+      video.addEventListener('error', onError);
+      video.addEventListener('canplay', onCanPlay);
+      
       // Timeout fallback
       setTimeout(() => {
         if (!videoLoaded) {
+          console.error('⏰ Video loading timeout from:', url);
+          video.removeEventListener('loadeddata', onLoadData);
+          video.removeEventListener('error', onError);
+          video.removeEventListener('canplay', onCanPlay);
           reject(new Error(`Video loading timeout from ${url}`));
         }
       }, 5000);
@@ -759,19 +772,19 @@
   try {
     await loadVideo(VIDEO_URL);
     console.log('✅ Primary video loaded successfully');
-    video.style.display = 'block'; // Show the video frame
+    // video remains hidden
   } catch (error) {
     console.log('❌ Primary video failed:', error.message, 'Trying fallback...');
     try {
       await loadVideo(FALLBACK_VIDEO_URL);
       console.log('✅ Fallback video loaded successfully');
-      video.style.display = 'block'; // Show the video frame
+      // video remains hidden
     } catch (fallbackError) {
       console.error('❌ Both videos failed to load:', fallbackError);
       console.log('🎨 Using test pattern instead');
       useTestPattern = true;
       statEl.textContent = 'Using test pattern';
-      video.style.display = 'none'; // Hide the video frame
+      // video already hidden
     }
   }
   
@@ -796,17 +809,38 @@
     gl.viewport(0, 0, canvas.width, canvas.height);
   }
 
-  // Setup WebGL with enhanced security
-  const gl = canvas.getContext('webgl', {
+  // Setup WebGL with enhanced security and diagnostics
+  console.log('🎨 Setting up WebGL context...');
+  const glOptions = {
     preserveDrawingBuffer: false,
     antialias: true,
     powerPreference: "high-performance",
     failIfMajorPerformanceCaveat: true
-  });
-  if (!gl) { 
-    alert('WebGL not available. Use a modern browser.'); 
-    return; 
+  };
+  console.log('🔧 WebGL options:', glOptions);
+  
+  const gl = canvas.getContext('webgl', glOptions) || canvas.getContext('experimental-webgl', glOptions);
+  
+  if (!gl) {
+    console.error('❌ WebGL context creation failed');
+    console.error('🔍 Available canvas contexts:', {
+      webgl: !!canvas.getContext('webgl'),
+      experimentalWebgl: !!canvas.getContext('experimental-webgl'),
+      '2d': !!canvas.getContext('2d')
+    });
+    alert('WebGL not available. Use a modern browser.');
+    return;
   }
+  
+  console.log('✅ WebGL context created successfully');
+  console.log('🔧 WebGL info:', {
+    version: gl.getParameter(gl.VERSION),
+    shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+    vendor: gl.getParameter(gl.VENDOR),
+    renderer: gl.getParameter(gl.RENDERER),
+    maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+    maxViewportDims: gl.getParameter(gl.MAX_VIEWPORT_DIMS)
+  });
 
   // Enhanced shader with encryption visualization
   const vs = `
@@ -853,20 +887,43 @@
     }`;
 
   function compileShader(src, type) {
+    console.log('🔨 Compiling shader:', type === gl.VERTEX_SHADER ? 'Vertex' : 'Fragment');
+    console.log('📄 Shader source length:', src.length);
+    
     const s = gl.createShader(type);
     gl.shaderSource(s, src);
     gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-      console.error(gl.getShaderInfoLog(s));
+    
+    const compileStatus = gl.getShaderParameter(s, gl.COMPILE_STATUS);
+    console.log('📊 Shader compilation status:', compileStatus);
+    
+    if (!compileStatus) {
+      const infoLog = gl.getShaderInfoLog(s);
+      console.error('❌ Shader compilation error:', infoLog);
+      console.error('🔍 Shader source preview:', src.substring(0, 200) + '...');
+      gl.deleteShader(s);
       throw new Error('Shader compile error');
     }
+    
+    console.log('✅ Shader compiled successfully');
     return s;
   }
 
+  console.log('🔗 Creating and linking shader program...');
   const prog = gl.createProgram();
   gl.attachShader(prog, compileShader(vs, gl.VERTEX_SHADER));
   gl.attachShader(prog, compileShader(fs, gl.FRAGMENT_SHADER));
-  gl.linkProgram(prog);
+  
+  const linkStatus = gl.linkProgram(prog);
+  console.log('📊 Program link status:', linkStatus);
+  console.log('📊 Program link info:', gl.getProgramInfoLog(prog));
+  
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    console.error('❌ Program linking failed');
+    throw new Error('Program linking failed');
+  }
+  
+  console.log('✅ Program linked successfully');
   gl.useProgram(prog);
 
   // Quad setup
@@ -887,25 +944,49 @@
   gl.vertexAttribPointer(a_pos, 2, gl.FLOAT, false, 16, 0);
   gl.vertexAttribPointer(a_uv, 2, gl.FLOAT, false, 16, 8);
 
-  // Create texture with anti-fingerprinting
+  // Create texture with anti-fingerprinting and enhanced logging
+  console.log('🖼️ Creating WebGL texture...');
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
+  
+  // Set texture parameters
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
   
   // Anti-fingerprinting: Randomize texture parameters
   const randomSeed = Math.random();
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, randomSeed > 0.5 ? gl.CLAMP_TO_EDGE : gl.REPEAT);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, randomSeed > 0.5 ? gl.CLAMP_TO_EDGE : gl.REPEAT);
+  const wrapMode = randomSeed > 0.5 ? gl.CLAMP_TO_EDGE : gl.REPEAT;
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapMode);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapMode);
+  
+  console.log('📊 Texture parameters set:', {
+    minFilter: gl.LINEAR,
+    magFilter: gl.LINEAR,
+    wrapS: wrapMode,
+    wrapT: wrapMode,
+    randomSeed: randomSeed
+  });
 
-  // Enhanced uniforms
-  const u_tex = gl.getUniformLocation(prog, 'u_tex');
-  const u_time = gl.getUniformLocation(prog, 'u_time');
-  const u_wmPos = gl.getUniformLocation(prog, 'u_wmPos');
-  const u_wmAlpha = gl.getUniformLocation(prog, 'u_wmAlpha');
-  const u_wmColor = gl.getUniformLocation(prog, 'u_wmColor');
-  const u_encryptionKey = gl.getUniformLocation(prog, 'u_encryptionKey');
+  // Enhanced uniforms with logging
+  console.log('🔍 Getting uniform locations...');
+  const uniforms = {
+    u_tex: gl.getUniformLocation(prog, 'u_tex'),
+    u_time: gl.getUniformLocation(prog, 'u_time'),
+    u_wmPos: gl.getUniformLocation(prog, 'u_wmPos'),
+    u_wmAlpha: gl.getUniformLocation(prog, 'u_wmAlpha'),
+    u_wmColor: gl.getUniformLocation(prog, 'u_wmColor'),
+    u_encryptionKey: gl.getUniformLocation(prog, 'u_encryptionKey')
+  };
+  
+  console.log('📊 Uniform locations:', uniforms);
+  
+  // Check for missing uniforms
+  Object.entries(uniforms).forEach(([name, location]) => {
+    if (location === null) {
+      console.warn('⚠️ Uniform not found:', name);
+    }
+  });
 
   // Overlay canvas for enhanced watermarking
   const overlay = document.createElement('canvas');
@@ -935,11 +1016,17 @@
   let lastRAF = performance.now();
   let frameCount = 0;
   let lastFrameTime = performance.now();
+  let rafGraceEnd = Date.now() + 10000; // 10s grace for load lag
   
   function rafCheck(now) {
     const dt = now - lastRAF;
     lastRAF = now;
     frameCount++;
+    
+    // Grace period for initial load lag
+    if (now < rafGraceEnd) {
+      return requestAnimationFrame(rafCheck);
+    }
     
     // Check for frame rate anomalies (OBS often causes irregular frame timing)
     if (dt > FRAME_GAP_THRESHOLD_MS) {
@@ -1392,16 +1479,30 @@
       statEl.textContent = 'Texture error';
     }
 
-    // Enhanced uniforms with encryption
+    // Enhanced uniforms with encryption and logging
     const t = (performance.now() - start) / 1000;
-    gl.uniform1f(u_time, t);
-    gl.uniform1f(u_encryptionKey, encryptionKey.charCodeAt(0) / 255.0);
+    console.log('🎨 Setting uniforms at time:', t.toFixed(2));
+    
+    if (uniforms.u_time !== null) {
+      gl.uniform1f(uniforms.u_time, t);
+    }
+    if (uniforms.u_encryptionKey !== null) {
+      gl.uniform1f(uniforms.u_encryptionKey, encryptionKey.charCodeAt(0) / 255.0);
+    }
     
     // Enhanced watermark movement
     const sx = 0.82 + Math.sin(t * 0.7) * 0.03, sy = 0.88 + Math.cos(t * 0.53) * 0.02;
-    gl.uniform2f(u_wmPos, sx, sy);
-    gl.uniform1f(u_wmAlpha, 0.5);
-    gl.uniform3f(u_wmColor, 1.0, 0.15, 0.15);
+    console.log('💧 Watermark position:', { sx: sx.toFixed(3), sy: sy.toFixed(3) });
+    
+    if (uniforms.u_wmPos !== null) {
+      gl.uniform2f(uniforms.u_wmPos, sx, sy);
+    }
+    if (uniforms.u_wmAlpha !== null) {
+      gl.uniform1f(uniforms.u_wmAlpha, 0.5);
+    }
+    if (uniforms.u_wmColor !== null) {
+      gl.uniform3f(uniforms.u_wmColor, 1.0, 0.15, 0.15);
+    }
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
@@ -1462,14 +1563,53 @@
     }
   });
 
+  // Enhanced initialization with diagnostics
+  console.log('🔍 Starting Enhanced Anti-Recording System initialization...');
+  console.log('📱 Device Info:', {
+    userAgent: navigator.userAgent,
+    isMobile: /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(navigator.userAgent.toLowerCase()),
+    screenResolution: `${screen.width}x${screen.height}`,
+    viewport: `${window.innerWidth}x${window.innerHeight}`
+  });
+  
+  // Test WebGL support
+  try {
+    const testCanvas = document.createElement('canvas');
+    const gl = testCanvas.getContext('webgl') || testCanvas.getContext('experimental-webgl');
+    if (!gl) {
+      console.error('❌ WebGL not supported');
+      statEl.textContent = 'WebGL Error';
+      return;
+    }
+    console.log('✅ WebGL supported:', gl.getParameter(gl.VERSION));
+  } catch (e) {
+    console.error('❌ WebGL test failed:', e);
+    statEl.textContent = 'WebGL Error';
+    return;
+  }
+  
+  // Test video loading
+  console.log('🎬 Testing video loading...');
+  const testVideo = document.createElement('video');
+  testVideo.preload = 'metadata';
+  testVideo.addEventListener('loadedmetadata', () => {
+    console.log('✅ Video metadata loaded successfully');
+  });
+  testVideo.addEventListener('error', (e) => {
+    console.error('❌ Video loading error:', e);
+    console.log('🔄 Trying fallback video...');
+  });
+  testVideo.src = VIDEO_URL;
+  
   // Initialize
+  console.log('📐 Initializing canvas and resize handling...');
   resize();
   window.addEventListener('resize', resize);
   statEl.textContent = 'OK';
   encStatEl.textContent = 'Active';
   
   // Start the draw loop
-  console.log('Starting draw loop...');
+  console.log('🎨 Starting draw loop...');
   draw();
 
   // Cleanup on page unload
