@@ -93,6 +93,18 @@
   #whitelist-btn:hover {
     background: rgba(78, 205, 196, 0.5);
   }
+
+  #metrics {
+    margin-top: 8px;
+    font-size: 10px;
+    color: #aaa;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  .metric { margin: 2px 0; }
+  .metric.green { color: #4ecdc4; }
+  .metric.yellow { color: #ffaa44; }
+  .metric.red { color: #ff6b6b; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -112,6 +124,16 @@
       <div style="font-weight:bold;margin-bottom:4px;">Detected Extensions:</div>
       <div id="extension-details"></div>
       <button id="whitelist-btn">Whitelist Current Extensions</button>
+    </div>
+    <div id="metrics">
+      <div style="font-weight:bold; margin-bottom:4px; color:#4ecdc4;">📊 Detection Metrics</div>
+      <div class="metric" id="gap-metric">Gap: 0/3</div>
+      <div class="metric" id="fps-metric">FPS: 0/3</div>
+      <div class="metric" id="var-metric">Var: 0/3</div>
+      <div class="metric" id="gpu-metric">GPU: 0/3</div>
+      <div class="metric" id="dt-metric">DT: -- ms</div>
+      <div class="metric" id="stddev-metric">StdDev: -- ms</div>
+      <div class="metric" id="gpuavg-metric">GPU Avg: -- ms</div>
     </div>
   </div>
   
@@ -1021,6 +1043,35 @@
   let readPixelsTimes = [];
   let probeCounter = 0;
   let gapCount = 0, fpsCount = 0, varCount = 0, gpuCount = 0; // Confirmation counters
+
+  // Metrics UI
+  const metricEls = {
+    gap: document.getElementById('gap-metric'),
+    fps: document.getElementById('fps-metric'),
+    var: document.getElementById('var-metric'),
+    gpu: document.getElementById('gpu-metric'),
+    dt: document.getElementById('dt-metric'),
+    stddev: document.getElementById('stddev-metric'),
+    gpuavg: document.getElementById('gpuavg-metric')
+  };
+  let lastDt = 0, lastStdDev = 0, lastGpuAvg = 0;
+
+  function updateMetrics() {
+    const setColor = (el, count) => {
+      el.className = 'metric ' + (count === 0 ? 'green' : count < 3 ? 'yellow' : 'red');
+    };
+    setColor(metricEls.gap, gapCount);
+    setColor(metricEls.fps, fpsCount);
+    setColor(metricEls.var, varCount);
+    setColor(metricEls.gpu, gpuCount);
+    metricEls.gap.textContent = `Gap: ${gapCount}/3`;
+    metricEls.fps.textContent = `FPS: ${fpsCount}/3`;
+    metricEls.var.textContent = `Var: ${varCount}/3`;
+    metricEls.gpu.textContent = `GPU: ${gpuCount}/3`;
+    metricEls.dt.textContent = `DT: ${Math.round(lastDt)} ms`;
+    metricEls.stddev.textContent = `StdDev: ${lastStdDev.toFixed(1)} ms`;
+    metricEls.gpuavg.textContent = `GPU Avg: ${lastGpuAvg.toFixed(1)} ms`;
+  }
   
   function rafCheck(now) {
     const dt = now - lastRAF;
