@@ -1095,7 +1095,9 @@
     metricEls.fps.className = 'metric green';
     metricEls.fps.textContent = 'FPS: N/A';
     setColor(metricEls.var, varCount);
-    setColor(metricEls.gpu, gpuCount);
+    // GPU metric display only (hardware variance normal)
+    metricEls.gpu.className = 'metric green';
+    metricEls.gpu.textContent = lastGpuAvg > 0 ? `GPU Avg: ${lastGpuAvg.toFixed(1)} ms` : 'GPU Avg: -- ms';
     metricEls.gap.textContent = `Gap: ${gapCount}/3`;
     metricEls.fps.textContent = `FPS: ${fpsCount}/3`;
     metricEls.var.textContent = `Var: ${varCount}/3`;
@@ -1644,14 +1646,9 @@
         const recentAvg = readPixelsTimes.slice(-10).reduce((a,b)=>a+b,0) / 10;
         lastGpuAvg = recentAvg;
         updateMetrics();
-        if (recentAvg > 6.0) {  // Relaxed GPU threshold for OBS testing
-          gpuCount = Math.min(gpuCount + 1, 5);
-          if (gpuCount >= 3) {
-            markDetected(`Slow GPU x3+: ${recentAvg.toFixed(1)}ms avg (OBS encoding)`);
-          }
-        } else {
-          gpuCount = Math.max(gpuCount - 1, 0);
-        }
+        // GPU detection disabled: hardware/browser variance normal
+        // Rely on Gap/Var for OBS
+        gpuCount = Math.max(gpuCount - 1, 0);
       }
     }
 
