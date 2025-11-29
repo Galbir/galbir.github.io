@@ -1,7 +1,7 @@
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>Enhanced Anti-Recording & Encryption System</title>
+<title>Enhanced Anti-Recording Encryption System</title>
 <style>
   html,body { height:100%; margin:0; background:#000; color:#fff; font-family:Arial,Helvetica,sans-serif; }
   #ui { position:fixed; left:12px; top:12px; z-index:50; background:rgba(0,0,0,0.45); padding:10px; border-radius:8px; }
