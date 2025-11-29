@@ -1143,15 +1143,16 @@
       lastFrameTime = now;
     }
     
-    if (frameDts.length >= 20) {
+    if (frameDts.length >= 60) {
       const mean = frameDts.reduce((a,b)=>a+b,0) / frameDts.length;
       const variance = frameDts.reduce((a,b)=>a + Math.pow(b-mean,2),0) / frameDts.length;
       const stdDev = Math.sqrt(variance);
       lastStdDev = stdDev;
-      if (stdDev < 2.0) {  // Relaxed variance for testing
+      const jitter = stdDev / mean;
+      if (jitter < 0.004) {  // <0.4% jitter: extreme smoothing (OBS etc.)
         varCount = Math.min(varCount + 1, 5);
         if (varCount >= 3) {
-          markDetected(`Low variance x3+: ${stdDev.toFixed(2)}ms stddev (smoothing/OBS)`);
+          markDetected(`Low jitter x3+: ${(jitter*100).toFixed(1)}% (${stdDev.toFixed(2)}ms stddev) (smoothing/OBS)`);
         }
       } else {
         varCount = Math.max(varCount - 1, 0);
