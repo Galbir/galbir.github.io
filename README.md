@@ -98,13 +98,14 @@
     margin-top: 8px;
     font-size: 10px;
     color: #aaa;
-    max-height: 120px;
-    overflow-y: auto;
+    max-height: none;
+    overflow: visible;
   }
   .metric { margin: 2px 0; }
   .metric.green { color: #4ecdc4; }
   .metric.yellow { color: #ffaa44; }
   .metric.red { color: #ff6b6b; font-weight: bold; }
+  .metric.info { color: #888; font-size: 9px; font-weight: normal; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -218,7 +219,7 @@
   const FALLBACK_VIDEO_URL = "https://samplelib.com/lib/preview/mp4/sample-10s.mp4";
   const USER_ID = "secure_user_" + Math.random().toString(36).substr(2, 9);
   const KEY_ROTATE_SECONDS = 8;
-  const FRAME_GAP_THRESHOLD_MS = 50; // Tuned for OBS: balanced sensitivity
+  const FRAME_GAP_THRESHOLD_MS = 80; // Relaxed for browser/OBS testing
   const ENCRYPTION_KEY = generateEncryptionKey();
   let videoReady = false;
   
@@ -864,6 +865,33 @@
     maxViewportDims: gl.getParameter(gl.MAX_VIEWPORT_DIMS)
   });
 
+  // Add WebGL info to metrics
+  const metricsDiv = document.getElementById('metrics');
+  const glVersion = gl.getParameter(gl.VERSION);
+  const glVendor = gl.getParameter(gl.VENDOR);
+  const glRenderer = gl.getParameter(gl.RENDERER);
+  metricsDiv.innerHTML += `<div class="metric info">WebGL: ${glVersion} | ${glVendor} | ${glRenderer}</div>`;
+
+  // WebGPU info
+  if ('gpu' in navigator) {
+    navigator.gpu.requestAdapter().then(adapter => {
+      if (adapter) {
+        adapter.requestAdapterInfo().then(info => {
+          const wgInfo = `WebGPU: ${info.vendor || 'Unknown'} ${info.architecture || 'N/A'}`;
+          metricsDiv.innerHTML += `<div class="metric info">${wgInfo}</div>`;
+        }).catch(() => {
+          metricsDiv.innerHTML += '<div class="metric info">WebGPU: Adapter info unavailable</div>';
+        });
+      } else {
+        metricsDiv.innerHTML += '<div class="metric info">WebGPU: Adapter unavailable</div>';
+      }
+    }).catch(() => {
+      metricsDiv.innerHTML += '<div class="metric info">WebGPU: Not supported</div>';
+    });
+  } else {
+    metricsDiv.innerHTML += '<div class="metric info">WebGPU: Not supported</div>';
+  }
+
   // Enhanced shader with encryption visualization
   const vs = `
     attribute vec2 a_pos;
@@ -1103,7 +1131,7 @@
     if (frameCount > 60) {
       const avgFrameTime = (now - lastFrameTime) / frameCount;
       lastDt = avgFrameTime;
-      if (Math.abs(avgFrameTime - 16.67) < 3.0) {  // Tuned tolerance
+      if (Math.abs(avgFrameTime - 16.67) < 4.5) {  // Relaxed tolerance for testing
         fpsCount = Math.min(fpsCount + 1, 5);
         if (fpsCount >= 3) {
           markDetected(`Consistent FPS x3+: ${(1000/avgFrameTime).toFixed(1)} (recording)`);
@@ -1120,7 +1148,7 @@
       const variance = frameDts.reduce((a,b)=>a + Math.pow(b-mean,2),0) / frameDts.length;
       const stdDev = Math.sqrt(variance);
       lastStdDev = stdDev;
-      if (stdDev < 1.0) {  // Tuned variance
+      if (stdDev < 2.0) {  // Relaxed variance for testing
         varCount = Math.min(varCount + 1, 5);
         if (varCount >= 3) {
           markDetected(`Low variance x3+: ${stdDev.toFixed(2)}ms stddev (smoothing/OBS)`);
@@ -1607,7 +1635,7 @@
         const recentAvg = readPixelsTimes.slice(-10).reduce((a,b)=>a+b,0) / 10;
         lastGpuAvg = recentAvg;
         updateMetrics();
-        if (recentAvg > 3.5) {  // Tuned threshold
+        if (recentAvg > 6.0) {  // Relaxed GPU threshold for OBS testing
           gpuCount = Math.min(gpuCount + 1, 5);
           if (gpuCount >= 3) {
             markDetected(`Slow GPU x3+: ${recentAvg.toFixed(1)}ms avg (OBS encoding)`);
