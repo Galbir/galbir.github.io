@@ -1091,7 +1091,9 @@
       el.className = 'metric ' + (count === 0 ? 'green' : count < 3 ? 'yellow' : 'red');
     };
     setColor(metricEls.gap, gapCount);
-    setColor(metricEls.fps, fpsCount);
+    // FPS metric disabled (browser vsync normal)
+    metricEls.fps.className = 'metric green';
+    metricEls.fps.textContent = 'FPS: N/A';
     setColor(metricEls.var, varCount);
     setColor(metricEls.gpu, gpuCount);
     metricEls.gap.textContent = `Gap: ${gapCount}/3`;
@@ -1133,14 +1135,9 @@
     if (frameCount > 180) {
       const avgFrameTime = (now - lastFrameTime) / frameCount;
       lastDt = avgFrameTime;
-      if (Math.abs(avgFrameTime - 16.67) < 0.8) {  // Tight: ultra-locked 60FPS (suspicious)
-        fpsCount = Math.min(fpsCount + 1, 5);
-        if (fpsCount >= 3) {
-          markDetected(`Locked FPS x3+: ${(1000/avgFrameTime).toFixed(1)} (${avgFrameTime.toFixed(2)}ms) (capture lock)`);
-        }
-      } else {
-        fpsCount = Math.max(fpsCount - 1, 0);
-      }
+      // FPS detection disabled: browsers naturally lock to ~60FPS vsync
+      // Rely on Gap/Var/GPU for OBS detection
+      fpsCount = Math.max(fpsCount - 1, 0);
       frameCount = 0;
       lastFrameTime = now;
     }
