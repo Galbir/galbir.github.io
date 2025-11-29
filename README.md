@@ -196,7 +196,7 @@
   const FALLBACK_VIDEO_URL = "https://samplelib.com/lib/preview/mp4/sample-10s.mp4";
   const USER_ID = "secure_user_" + Math.random().toString(36).substr(2, 9);
   const KEY_ROTATE_SECONDS = 8;
-  const FRAME_GAP_THRESHOLD_MS = 40; // Detect dropped frames / OBS recording
+  const FRAME_GAP_THRESHOLD_MS = 50; // Tuned for OBS: balanced sensitivity
   const ENCRYPTION_KEY = generateEncryptionKey();
   let videoReady = false;
   
@@ -1016,10 +1016,11 @@
   let lastRAF = performance.now();
   let frameCount = 0;
   let lastFrameTime = performance.now();
-  let rafGraceEnd = Date.now() + 3000; // 3s grace period
+  let rafGraceEnd = Date.now() + 2000; // 2s grace: fast start, low false pos
   let frameDts = [];
   let readPixelsTimes = [];
   let probeCounter = 0;
+  let gapCount = 0, fpsCount = 0, varCount = 0, gpuCount = 0; // Confirmation counters
   
   function rafCheck(now) {
     const dt = now - lastRAF;
@@ -1034,14 +1035,25 @@
       return requestAnimationFrame(rafCheck);
     }
     
+    // Gap detection with counter (3+ confirms OBS stutter)
     if (dt > FRAME_GAP_THRESHOLD_MS) {
-      markDetected(`rAF gap: ${Math.round(dt)}ms (dropped frames/OBS)`);
+      gapCount = Math.min(gapCount + 1, 5);
+      if (gapCount >= 3) {
+        markDetected(`rAF gaps x3+: ${Math.round(dt)}ms (dropped frames/OBS)`);
+      }
+    } else {
+      gapCount = Math.max(gapCount - 1, 0);
     }
     
     if (frameCount > 60) {
       const avgFrameTime = (now - lastFrameTime) / frameCount;
-      if (Math.abs(avgFrameTime - 16.67) < 2.5) {
-        markDetected(`Suspiciously consistent FPS: ${(1000/avgFrameTime).toFixed(1)}`);
+      if (Math.abs(avgFrameTime - 16.67) < 3.0) {  // Tuned tolerance
+        fpsCount = Math.min(fpsCount + 1, 5);
+        if (fpsCount >= 3) {
+          markDetected(`Consistent FPS x3+: ${(1000/avgFrameTime).toFixed(1)} (recording)`);
+        }
+      } else {
+        fpsCount = Math.max(fpsCount - 1, 0);
       }
       frameCount = 0;
       lastFrameTime = now;
@@ -1051,8 +1063,13 @@
       const mean = frameDts.reduce((a,b)=>a+b,0) / frameDts.length;
       const variance = frameDts.reduce((a,b)=>a + Math.pow(b-mean,2),0) / frameDts.length;
       const stdDev = Math.sqrt(variance);
-      if (stdDev < 0.8) {
-        markDetected(`Low frame variance: ${stdDev.toFixed(2)}ms stddev (recording?)`);
+      if (stdDev < 1.0) {  // Tuned variance
+        varCount = Math.min(varCount + 1, 5);
+        if (varCount >= 3) {
+          markDetected(`Low variance x3+: ${stdDev.toFixed(2)}ms stddev (smoothing/OBS)`);
+        }
+      } else {
+        varCount = Math.max(varCount - 1, 0);
       }
     }
     
@@ -1521,7 +1538,7 @@
 
     // GPU load probe for screen recording detection (OBS etc.)
     probeCounter++;
-    if (probeCounter % 180 === 0) {  // approx every 3s @60fps
+    if (probeCounter % 120 === 0) {  // ~2s @60fps: faster checks
       const pixels = new Uint8Array(4);
       const t0 = performance.now();
       gl.readPixels(canvas.width - 1, canvas.height - 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
@@ -1531,8 +1548,13 @@
       if (readPixelsTimes.length > 30) readPixelsTimes.shift();
       if (readPixelsTimes.length >= 10) {
         const recentAvg = readPixelsTimes.slice(-10).reduce((a,b)=>a+b,0) / 10;
-        if (recentAvg > 4.0) {
-          markDetected(`Slow readPixels: ${recentAvg.toFixed(1)}ms avg (high GPU load/OBS?)`);
+        if (recentAvg > 3.5) {  // Tuned threshold
+          gpuCount = Math.min(gpuCount + 1, 5);
+          if (gpuCount >= 3) {
+            markDetected(`Slow GPU x3+: ${recentAvg.toFixed(1)}ms avg (OBS encoding)`);
+          }
+        } else {
+          gpuCount = Math.max(gpuCount - 1, 0);
         }
       }
     }
