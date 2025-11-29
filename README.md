@@ -196,7 +196,7 @@
   const FALLBACK_VIDEO_URL = "https://samplelib.com/lib/preview/mp4/sample-10s.mp4";
   const USER_ID = "secure_user_" + Math.random().toString(36).substr(2, 9);
   const KEY_ROTATE_SECONDS = 8;
-  const FRAME_GAP_THRESHOLD_MS = 500; // Increased to reduce false positives on load/OBS
+  const FRAME_GAP_THRESHOLD_MS = 40; // Detect dropped frames / OBS recording
   const ENCRYPTION_KEY = generateEncryptionKey();
   let videoReady = false;
   
@@ -1016,31 +1016,44 @@
   let lastRAF = performance.now();
   let frameCount = 0;
   let lastFrameTime = performance.now();
-  let rafGraceEnd = Date.now() + 10000; // 10s grace for load lag
+  let rafGraceEnd = Date.now() + 3000; // 3s grace period
+  let frameDts = [];
+  let readPixelsTimes = [];
+  let probeCounter = 0;
   
   function rafCheck(now) {
     const dt = now - lastRAF;
     lastRAF = now;
     frameCount++;
     
+    frameDts.push(dt);
+    if (frameDts.length > 120) frameDts.shift();
+    
     // Grace period for initial load lag
     if (now < rafGraceEnd) {
       return requestAnimationFrame(rafCheck);
     }
     
-    // Check for frame rate anomalies (OBS often causes irregular frame timing)
     if (dt > FRAME_GAP_THRESHOLD_MS) {
-      markDetected('High rAF gap: ' + Math.round(dt) + 'ms (possible OBS hook)');
+      markDetected(`rAF gap: ${Math.round(dt)}ms (dropped frames/OBS)`);
     }
     
-    // Check for consistent frame timing (screen recording often has regular patterns)
     if (frameCount > 60) {
       const avgFrameTime = (now - lastFrameTime) / frameCount;
-      if (Math.abs(avgFrameTime - 16.67) < 1) { // Very close to 60fps
-        markDetected('Consistent 60fps detected (possible screen recording)');
+      if (Math.abs(avgFrameTime - 16.67) < 2.5) {
+        markDetected(`Suspiciously consistent FPS: ${(1000/avgFrameTime).toFixed(1)}`);
       }
       frameCount = 0;
       lastFrameTime = now;
+    }
+    
+    if (frameDts.length >= 60) {
+      const mean = frameDts.reduce((a,b)=>a+b,0) / frameDts.length;
+      const variance = frameDts.reduce((a,b)=>a + Math.pow(b-mean,2),0) / frameDts.length;
+      const stdDev = Math.sqrt(variance);
+      if (stdDev < 0.8) {
+        markDetected(`Low frame variance: ${stdDev.toFixed(2)}ms stddev (recording?)`);
+      }
     }
     
     requestAnimationFrame(rafCheck);
@@ -1505,6 +1518,24 @@
     }
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    // GPU load probe for screen recording detection (OBS etc.)
+    probeCounter++;
+    if (probeCounter % 180 === 0) {  // approx every 3s @60fps
+      const pixels = new Uint8Array(4);
+      const t0 = performance.now();
+      gl.readPixels(canvas.width - 1, canvas.height - 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      const t1 = performance.now();
+      const duration = t1 - t0;
+      readPixelsTimes.push(duration);
+      if (readPixelsTimes.length > 30) readPixelsTimes.shift();
+      if (readPixelsTimes.length >= 10) {
+        const recentAvg = readPixelsTimes.slice(-10).reduce((a,b)=>a+b,0) / 10;
+        if (recentAvg > 4.0) {
+          markDetected(`Slow readPixels: ${recentAvg.toFixed(1)}ms avg (high GPU load/OBS?)`);
+        }
+      }
+    }
 
     // Enhanced overlay watermark
     overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
