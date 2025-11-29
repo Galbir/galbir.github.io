@@ -1048,7 +1048,15 @@
     encStatEl.textContent = 'Compromised';
     warningEl.style.display = 'block';
     decryptionKeyValid = false;
-    setTimeout(() => { blackout = true; }, 80);
+    blackout = true; // Immediately blackout
+    
+    // Hide video frame and play button on security breach
+    if (video) {
+      video.style.display = 'none';
+    }
+    if (playButton) {
+      playButton.style.display = 'none';
+    }
     
     // Populate detailed breach information
     const now = new Date();
