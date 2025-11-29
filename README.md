@@ -688,9 +688,44 @@
   video.loop = true;
   video.playsInline = true;
   
-  // Add video to DOM but hide it
-  video.style.display = 'none';
+  // Add video to DOM but make it visible for debugging
+  video.style.position = 'fixed';
+  video.style.top = '10px';
+  video.style.right = '10px';
+  video.style.width = '320px';
+  video.style.height = '180px';
+  video.style.border = '2px solid #4ecdc4';
+  video.style.zIndex = '100';
+  video.style.background = '#000';
+  video.style.display = 'block';
   document.body.appendChild(video);
+  
+  // Add play button if autoplay fails
+  const playButton = document.createElement('button');
+  playButton.textContent = '▶ Play Video';
+  playButton.style.position = 'fixed';
+  playButton.style.top = '200px';
+  playButton.style.right = '10px';
+  playButton.style.zIndex = '101';
+  playButton.style.padding = '8px 12px';
+  playButton.style.background = '#4ecdc4';
+  playButton.style.border = 'none';
+  playButton.style.borderRadius = '4px';
+  playButton.style.color = '#000';
+  playButton.style.fontWeight = 'bold';
+  playButton.style.cursor = 'pointer';
+  playButton.style.display = 'block';
+  
+  playButton.addEventListener('click', () => {
+    video.play().then(() => {
+      console.log('✅ Video played manually');
+      playButton.style.display = 'none';
+    }).catch(e => {
+      console.log('❌ Manual play failed:', e);
+    });
+  });
+  
+  document.body.appendChild(playButton);
   
   // Try to load video with fallback
   let videoLoaded = false;
@@ -698,13 +733,19 @@
   
   function loadVideo(url) {
     return new Promise((resolve, reject) => {
+      console.log('Attempting to load video from:', url);
       video.src = url;
       video.addEventListener('loadeddata', () => {
         videoLoaded = true;
+        console.log('Video loaded data event fired');
         resolve();
       });
-      video.addEventListener('error', () => {
+      video.addEventListener('error', (e) => {
+        console.error('Video error event:', e);
         reject(new Error(`Failed to load video from ${url}`));
+      });
+      video.addEventListener('canplay', () => {
+        console.log('Video canplay event fired');
       });
       // Timeout fallback
       setTimeout(() => {
@@ -717,17 +758,20 @@
   
   try {
     await loadVideo(VIDEO_URL);
-    console.log('Primary video loaded successfully');
+    console.log('✅ Primary video loaded successfully');
+    video.style.display = 'block'; // Show the video frame
   } catch (error) {
-    console.log('Primary video failed:', error.message, 'Trying fallback...');
+    console.log('❌ Primary video failed:', error.message, 'Trying fallback...');
     try {
       await loadVideo(FALLBACK_VIDEO_URL);
-      console.log('Fallback video loaded successfully');
+      console.log('✅ Fallback video loaded successfully');
+      video.style.display = 'block'; // Show the video frame
     } catch (fallbackError) {
-      console.error('Both videos failed to load:', fallbackError);
-      console.log('Using test pattern instead');
+      console.error('❌ Both videos failed to load:', fallbackError);
+      console.log('🎨 Using test pattern instead');
       useTestPattern = true;
       statEl.textContent = 'Using test pattern';
+      video.style.display = 'none'; // Hide the video frame
     }
   }
   
@@ -735,12 +779,12 @@
     // Try to play the video
     try {
       await video.play();
-      console.log('Video playing successfully');
+      console.log('✅ Video playing successfully');
     } catch (e) {
-      console.log('Video autoplay prevented:', e);
+      console.log('⚠️ Video autoplay prevented:', e);
       // Try to play without autoplay
       video.play().catch(() => {
-        console.log('Video play failed even without autoplay');
+        console.log('❌ Video play failed even without autoplay');
       });
     }
   }
@@ -1255,7 +1299,7 @@
         
         if (!videoReady) {
           videoReady = true;
-          console.log('Test pattern loaded');
+          console.log('🎨 Test pattern loaded');
           statEl.textContent = 'OK - Test pattern';
         }
       } else {
@@ -1266,19 +1310,20 @@
         if (video.readyState >= 2) {
           if (!videoReady) {
             videoReady = true;
-            console.log('Video is ready for rendering');
+            console.log('🎬 Video is ready for rendering');
+            console.log('Video dimensions:', video.videoWidth, 'x', video.videoHeight);
             statEl.textContent = 'OK - Video playing';
           }
         } else {
           if (videoReady) {
             videoReady = false;
-            console.log('Video not ready for rendering');
+            console.log('⏳ Video not ready for rendering (readyState:', video.readyState, ')');
             statEl.textContent = 'Waiting for video...';
           }
         }
       }
     } catch (e) {
-      console.log('Texture error:', e);
+      console.log('❌ Texture error:', e);
       statEl.textContent = 'Texture error';
     }
 
