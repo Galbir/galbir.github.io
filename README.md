@@ -1,7 +1,7 @@
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>Enhanced Anti-Recording Encryption System</title>
+<title>Enhanced Anti-Recording & Encryption System</title>
 <style>
   html,body { height:100%; margin:0; background:#000; color:#fff; font-family:Arial,Helvetica,sans-serif; }
   #ui { position:fixed; left:12px; top:12px; z-index:50; background:rgba(0,0,0,0.45); padding:10px; border-radius:8px; }
@@ -1098,6 +1098,7 @@
     
     if (frameCount > 60) {
       const avgFrameTime = (now - lastFrameTime) / frameCount;
+      lastDt = avgFrameTime;
       if (Math.abs(avgFrameTime - 16.67) < 3.0) {  // Tuned tolerance
         fpsCount = Math.min(fpsCount + 1, 5);
         if (fpsCount >= 3) {
@@ -1114,6 +1115,7 @@
       const mean = frameDts.reduce((a,b)=>a+b,0) / frameDts.length;
       const variance = frameDts.reduce((a,b)=>a + Math.pow(b-mean,2),0) / frameDts.length;
       const stdDev = Math.sqrt(variance);
+      lastStdDev = stdDev;
       if (stdDev < 1.0) {  // Tuned variance
         varCount = Math.min(varCount + 1, 5);
         if (varCount >= 3) {
@@ -1124,6 +1126,7 @@
       }
     }
     
+    updateMetrics();
     requestAnimationFrame(rafCheck);
   }
   requestAnimationFrame(rafCheck);
@@ -1599,6 +1602,7 @@
       if (readPixelsTimes.length > 30) readPixelsTimes.shift();
       if (readPixelsTimes.length >= 10) {
         const recentAvg = readPixelsTimes.slice(-10).reduce((a,b)=>a+b,0) / 10;
+        lastGpuAvg = recentAvg;
         if (recentAvg > 3.5) {  // Tuned threshold
           gpuCount = Math.min(gpuCount + 1, 5);
           if (gpuCount >= 3) {
