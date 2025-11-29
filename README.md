@@ -1038,7 +1038,7 @@
   let lastRAF = performance.now();
   let frameCount = 0;
   let lastFrameTime = performance.now();
-  let rafGraceEnd = Date.now() + 2000; // 2s grace: fast start, low false pos
+  let rafGraceEnd = performance.now() + 500; // Short grace: fast metrics
   let frameDts = [];
   let readPixelsTimes = [];
   let probeCounter = 0;
@@ -1068,22 +1068,26 @@
     metricEls.fps.textContent = `FPS: ${fpsCount}/3`;
     metricEls.var.textContent = `Var: ${varCount}/3`;
     metricEls.gpu.textContent = `GPU: ${gpuCount}/3`;
-    metricEls.dt.textContent = `DT: ${Math.round(lastDt)} ms`;
-    metricEls.stddev.textContent = `StdDev: ${lastStdDev.toFixed(1)} ms`;
-    metricEls.gpuavg.textContent = `GPU Avg: ${lastGpuAvg.toFixed(1)} ms`;
+    metricEls.dt.textContent = lastDt > 0 ? `DT: ${Math.round(lastDt)} ms` : `DT: -- ms`;
+    metricEls.stddev.textContent = lastStdDev > 0 ? `StdDev: ${lastStdDev.toFixed(1)} ms` : `StdDev: -- ms`;
+    metricEls.gpuavg.textContent = lastGpuAvg > 0 ? `GPU Avg: ${lastGpuAvg.toFixed(1)} ms` : `GPU Avg: -- ms`;
   }
   
   function rafCheck(now) {
     const dt = now - lastRAF;
     lastRAF = now;
+    lastDt = dt;
     frameCount++;
     
     frameDts.push(dt);
     if (frameDts.length > 120) frameDts.shift();
     
+    updateMetrics();
+    
     // Grace period for initial load lag
     if (now < rafGraceEnd) {
-      return requestAnimationFrame(rafCheck);
+      requestAnimationFrame(rafCheck);
+      return;
     }
     
     // Gap detection with counter (3+ confirms OBS stutter)
@@ -1111,7 +1115,7 @@
       lastFrameTime = now;
     }
     
-    if (frameDts.length >= 60) {
+    if (frameDts.length >= 20) {
       const mean = frameDts.reduce((a,b)=>a+b,0) / frameDts.length;
       const variance = frameDts.reduce((a,b)=>a + Math.pow(b-mean,2),0) / frameDts.length;
       const stdDev = Math.sqrt(variance);
@@ -1126,7 +1130,6 @@
       }
     }
     
-    updateMetrics();
     requestAnimationFrame(rafCheck);
   }
   requestAnimationFrame(rafCheck);
@@ -1592,7 +1595,7 @@
 
     // GPU load probe for screen recording detection (OBS etc.)
     probeCounter++;
-    if (probeCounter % 120 === 0) {  // ~2s @60fps: faster checks
+    if (probeCounter % 60 === 0) {  // ~1s @60fps: faster GPU metrics
       const pixels = new Uint8Array(4);
       const t0 = performance.now();
       gl.readPixels(canvas.width - 1, canvas.height - 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
@@ -1603,6 +1606,7 @@
       if (readPixelsTimes.length >= 10) {
         const recentAvg = readPixelsTimes.slice(-10).reduce((a,b)=>a+b,0) / 10;
         lastGpuAvg = recentAvg;
+        updateMetrics();
         if (recentAvg > 3.5) {  // Tuned threshold
           gpuCount = Math.min(gpuCount + 1, 5);
           if (gpuCount >= 3) {
