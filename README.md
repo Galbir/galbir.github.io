@@ -1,4 +1,3 @@
-<!doctype html>
 <html>
 <head>
 <meta charset="utf-8"/>
@@ -194,10 +193,12 @@
 (async function(){
   // ========== ENHANCED CONFIGURATION ==========
   const VIDEO_URL = "https://www.w3schools.com/html/mov_bbb.mp4";
+  const FALLBACK_VIDEO_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
   const USER_ID = "secure_user_" + Math.random().toString(36).substr(2, 9);
   const KEY_ROTATE_SECONDS = 8;
   const FRAME_GAP_THRESHOLD_MS = 300; // Increased from 140 to reduce false positives
   const ENCRYPTION_KEY = generateEncryptionKey();
+  let videoReady = false;
   
   // WHITELIST APPROACH - Known safe extensions
   const EXTENSION_WHITELIST = [
@@ -680,14 +681,69 @@
     }
   }, 1000);
 
-  // Create hidden video
+  // Create video element
   const video = document.createElement('video');
   video.crossOrigin = "anonymous";
-  video.src = VIDEO_URL;
   video.muted = true;
   video.loop = true;
   video.playsInline = true;
-  await video.play().catch(() => {});
+  
+  // Add video to DOM but hide it
+  video.style.display = 'none';
+  document.body.appendChild(video);
+  
+  // Try to load video with fallback
+  let videoLoaded = false;
+  let useTestPattern = false;
+  
+  function loadVideo(url) {
+    return new Promise((resolve, reject) => {
+      video.src = url;
+      video.addEventListener('loadeddata', () => {
+        videoLoaded = true;
+        resolve();
+      });
+      video.addEventListener('error', () => {
+        reject(new Error(`Failed to load video from ${url}`));
+      });
+      // Timeout fallback
+      setTimeout(() => {
+        if (!videoLoaded) {
+          reject(new Error(`Video loading timeout from ${url}`));
+        }
+      }, 5000);
+    });
+  }
+  
+  try {
+    await loadVideo(VIDEO_URL);
+    console.log('Primary video loaded successfully');
+  } catch (error) {
+    console.log('Primary video failed:', error.message, 'Trying fallback...');
+    try {
+      await loadVideo(FALLBACK_VIDEO_URL);
+      console.log('Fallback video loaded successfully');
+    } catch (fallbackError) {
+      console.error('Both videos failed to load:', fallbackError);
+      console.log('Using test pattern instead');
+      useTestPattern = true;
+      statEl.textContent = 'Using test pattern';
+    }
+  }
+  
+  if (!useTestPattern) {
+    // Try to play the video
+    try {
+      await video.play();
+      console.log('Video playing successfully');
+    } catch (e) {
+      console.log('Video autoplay prevented:', e);
+      // Try to play without autoplay
+      video.play().catch(() => {
+        console.log('Video play failed even without autoplay');
+      });
+    }
+  }
 
   // Resize canvas to window
   function resize() {
@@ -1170,10 +1226,60 @@
     }
 
     try {
-      gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+      if (useTestPattern) {
+        // Create a simple test pattern
+        const canvas = document.createElement('canvas');
+        canvas.width = 640;
+        canvas.height = 360;
+        const ctx = canvas.getContext('2d');
+        
+        // Create gradient test pattern
+        const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+        gradient.addColorStop(0, '#ff0000');
+        gradient.addColorStop(0.25, '#00ff00');
+        gradient.addColorStop(0.5, '#0000ff');
+        gradient.addColorStop(0.75, '#ffff00');
+        gradient.addColorStop(1, '#ff00ff');
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Add some text
+        ctx.fillStyle = 'white';
+        ctx.font = '48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('TEST PATTERN', canvas.width/2, canvas.height/2);
+        
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+        
+        if (!videoReady) {
+          videoReady = true;
+          console.log('Test pattern loaded');
+          statEl.textContent = 'OK - Test pattern';
+        }
+      } else {
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        
+        // Debug: Check if video is ready
+        if (video.readyState >= 2) {
+          if (!videoReady) {
+            videoReady = true;
+            console.log('Video is ready for rendering');
+            statEl.textContent = 'OK - Video playing';
+          }
+        } else {
+          if (videoReady) {
+            videoReady = false;
+            console.log('Video not ready for rendering');
+            statEl.textContent = 'Waiting for video...';
+          }
+        }
+      }
     } catch (e) {
-      // Ignore video readiness errors
+      console.log('Texture error:', e);
+      statEl.textContent = 'Texture error';
     }
 
     // Enhanced uniforms with encryption
@@ -1251,6 +1357,10 @@
   window.addEventListener('resize', resize);
   statEl.textContent = 'OK';
   encStatEl.textContent = 'Active';
+  
+  // Start the draw loop
+  console.log('Starting draw loop...');
+  draw();
 
   // Cleanup on page unload
   window.addEventListener('beforeunload', () => {
