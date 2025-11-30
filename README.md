@@ -1,4 +1,4 @@
-<video id="video" controls autoplay width="640" height="360"></video>
+<video id="video" controls autoplay muted width="640" height="360"></video>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
     const video = document.getElementById('video');
