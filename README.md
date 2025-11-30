@@ -1,19 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Player</title>
-</head>
-<body>
-    <div style="position:relative;aspect-ratio:16/9;">
-        <iframe 
-            loading="lazy" title="Gumlet video player"
-            src="https://play.gumlet.io/embed/692c15452dbb9012ada71cb8"
-            style="border:none; position: absolute; top: 0; left: 0; height: 100%; width: 100%;"
-            referrerpolicy="origin"
-            allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;">
-        </iframe>
-    </div>
-</body>
-</html>
+<video id="video" controls autoplay width="640" height="360"></video>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script>
+    const video = document.getElementById('video');
+    const hlsUrl = 'http://10.13.4.134:8080/hls/demo.m3u8';
+
+    if(Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(hlsUrl);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+    } else if(video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = hlsUrl;
+        video.addEventListener('loadedmetadata', () => video.play());
+    }
+</script>
